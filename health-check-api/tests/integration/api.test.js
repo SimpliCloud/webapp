@@ -45,9 +45,7 @@ afterAll(async () => {
 
 describe('API Integration Tests', () => {
   
-  // ========================================
   // A. POSITIVE TEST CASES
-  // ========================================
   
   describe('A. POSITIVE TEST CASES', () => {
     
@@ -213,10 +211,8 @@ describe('API Integration Tests', () => {
     });
   });
 
-  // ========================================
   // B. NEGATIVE TEST CASES
-  // ========================================
-  
+
   describe('B. NEGATIVE TEST CASES', () => {
     
     describe('Invalid Input Tests', () => {
@@ -352,10 +348,8 @@ describe('API Integration Tests', () => {
     });
   });
 
-  // ========================================
   // C. EDGE CASE TESTS
-  // ========================================
-  
+
   describe('C. EDGE CASE TESTS', () => {
     
     describe('Boundary Value Tests', () => {
@@ -614,10 +608,8 @@ describe('API Integration Tests', () => {
     });
   });
 
-  // ========================================
   // HEALTH CHECK TESTS
-  // ========================================
-  
+
   describe('Health Check Tests', () => {
     test('should return 200 when healthy', async () => {
       await request(app)
