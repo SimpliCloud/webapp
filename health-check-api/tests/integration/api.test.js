@@ -3,6 +3,7 @@ const app = require('../../server');
 const { sequelize } = require('../../config/database');
 const User = require('../../models/User');
 const Product = require('../../models/Product');
+const HealthCheck = require('../../models/HealthCheck');
 
 // Test data
 let userId1, userId2, productId;
@@ -16,7 +17,7 @@ const testUser = {
 };
 
 const testUser2 = {
-  email: 'integration2@test.com', 
+  email: 'integration2@test.com',
   password: 'TestPass456!',
   first_name: 'Second',
   last_name: 'User'
@@ -44,11 +45,11 @@ afterAll(async () => {
 });
 
 describe('API Integration Tests', () => {
-  
+
   // A. POSITIVE TEST CASES
-  
+
   describe('A. POSITIVE TEST CASES', () => {
-    
+
     describe('Creation Tests', () => {
       test('should create user with valid data', async () => {
         const response = await request(app)
@@ -60,7 +61,7 @@ describe('API Integration Tests', () => {
         expect(response.body).toHaveProperty('id');
         expect(response.body.email).toBe(testUser.email);
         expect(response.body).not.toHaveProperty('password');
-        
+
         userId1 = response.body.id;
         authToken1 = Buffer.from(`${testUser.email}:${testUser.password}`).toString('base64');
       });
@@ -70,7 +71,7 @@ describe('API Integration Tests', () => {
           .post('/v1/user')
           .send(testUser2)
           .expect(201);
-        
+
         userId2 = response.body.id;
         authToken2 = Buffer.from(`${testUser2.email}:${testUser2.password}`).toString('base64');
       });
@@ -214,7 +215,7 @@ describe('API Integration Tests', () => {
   // B. NEGATIVE TEST CASES
 
   describe('B. NEGATIVE TEST CASES', () => {
-    
+
     describe('Invalid Input Tests', () => {
       test('should reject user creation with missing required fields', async () => {
         await request(app)
@@ -351,7 +352,7 @@ describe('API Integration Tests', () => {
   // C. EDGE CASE TESTS
 
   describe('C. EDGE CASE TESTS', () => {
-    
+
     describe('Boundary Value Tests', () => {
       test('should handle minimum string length (empty not allowed)', async () => {
         await request(app)
@@ -466,7 +467,7 @@ describe('API Integration Tests', () => {
     describe('Performance/Load Tests', () => {
       test('should handle concurrent requests', async () => {
         const promises = [];
-        
+
         // Send 10 concurrent health check requests
         for (let i = 0; i < 10; i++) {
           promises.push(
@@ -482,18 +483,18 @@ describe('API Integration Tests', () => {
 
       test('should respond within reasonable time', async () => {
         const startTime = Date.now();
-        
+
         await request(app)
           .get('/healthz')
           .expect(200);
-        
+
         const responseTime = Date.now() - startTime;
         expect(responseTime).toBeLessThan(1000); // Should respond within 1 second
       });
 
       test('should handle multiple users creating products simultaneously', async () => {
         const promises = [];
-        
+
         for (let i = 0; i < 5; i++) {
           promises.push(
             request(app)
@@ -628,6 +629,26 @@ describe('API Integration Tests', () => {
         .get('/healthz')
         .send({ test: 'data' })
         .expect(400);
+    });
+  });
+
+  describe('Service Availability Tests', () => {
+    test('should return 503 when database operation fails', async () => {
+      // Save the original method
+      const originalMethod = HealthCheck.createHealthCheckRecord;
+
+      // Mock it to throw an error
+      HealthCheck.createHealthCheckRecord = jest.fn().mockImplementation(() => {
+        throw new Error('Database connection failed');
+      });
+
+      // Now test should get 503
+      const response = await request(app)
+        .get('/healthz')
+        .expect(503);
+
+      // Restore the original method
+      HealthCheck.createHealthCheckRecord = originalMethod;
     });
   });
 });
