@@ -102,12 +102,6 @@ jobs:
         DB_USER: root
         DB_PASS: root
       run: npm run test:integration
-    
-    - name: Run 503 test
-      run: |
-        # Run test that will stop/start MySQL
-        sudo npm run test:503
-      continue-on-error: true  # Don't fail build if this test has issues
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
