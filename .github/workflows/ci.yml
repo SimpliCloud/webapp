@@ -14,8 +14,8 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: health_check_db
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.DB_NAME_TEST }}
         ports:
           - 3306:3306
         options: >-
@@ -39,7 +39,7 @@ jobs:
 
     - name: Wait for MySQL
       run: |
-        until mysqladmin ping -h 127.0.0.1 -P 3306 --silent; do
+        until mysqladmin ping -h ${{ secrets.DB_HOST_TEST }} -P ${{ secrets.DB_PORT_TEST }} --silent; do
           echo 'Waiting for MySQL...'
           sleep 2
         done
@@ -47,28 +47,28 @@ jobs:
     - name: Setup test environment
       env:
         NODE_ENV: test
-        DB_HOST: 127.0.0.1
-        DB_PORT: 3306
-        DB_NAME: health_check_db
-        DB_USER: root
-        DB_PASS: root
+        DB_HOST: ${{ secrets.DB_HOST_TEST }}
+        DB_PORT: ${{ secrets.DB_PORT_TEST }}
+        DB_NAME: ${{ secrets.DB_NAME_TEST }}
+        DB_USER: ${{ secrets.DB_USER_TEST }}
+        DB_PASS: ${{ secrets.DB_PASSWORD_TEST }}
       run: |
         echo "NODE_ENV=test" > .env
-        echo "DB_HOST=127.0.0.1" >> .env
-        echo "DB_PORT=3306" >> .env
-        echo "DB_NAME=health_check_db" >> .env
-        echo "DB_USER=root" >> .env
-        echo "DB_PASS=root" >> .env
+        echo "DB_HOST=$DB_HOST" >> .env
+        echo "DB_PORT=$DB_PORT" >> .env
+        echo "DB_NAME=$DB_NAME" >> .env
+        echo "DB_USER=$DB_USER" >> .env
+        echo "DB_PASS=$DB_PASS" >> .env
         echo "PORT=8080" >> .env
 
     - name: Setup database schema
       env:
         NODE_ENV: test
-        DB_HOST: 127.0.0.1
-        DB_PORT: 3306
-        DB_NAME: health_check_db
-        DB_USER: root
-        DB_PASS: root
+        DB_HOST: ${{ secrets.DB_HOST_TEST }}
+        DB_PORT: ${{ secrets.DB_PORT_TEST }}
+        DB_NAME: ${{ secrets.DB_NAME_TEST }}
+        DB_USER: ${{ secrets.DB_USER_TEST }}
+        DB_PASS: ${{ secrets.DB_PASSWORD_TEST }}
       run: |
         node -e "
         const { sequelize } = require('./models');
@@ -86,65 +86,22 @@ jobs:
     - name: Run unit tests
       env:
         NODE_ENV: test
-        DB_HOST: 127.0.0.1
-        DB_PORT: 3306
-        DB_NAME: health_check_db
-        DB_USER: root
-        DB_PASS: root
+        DB_HOST: ${{ secrets.DB_HOST_TEST }}
+        DB_PORT: ${{ secrets.DB_PORT_TEST }}
+        DB_NAME: ${{ secrets.DB_NAME_TEST }}
+        DB_USER: ${{ secrets.DB_USER_TEST }}
+        DB_PASS: ${{ secrets.DB_PASSWORD_TEST }}
       run: npm run test:unit
 
-    - name: Run integration tests with database failure simulation
+    - name: Run integration tests
       env:
         NODE_ENV: test
-        DB_HOST: 127.0.0.1
-        DB_PORT: 3306
-        DB_NAME: health_check_db
-        DB_USER: root
-        DB_PASS: root
-      run: |
-        # Start integration tests in background
-        npm run test:integration &
-        TEST_PID=$!
-        
-        # Wait for tests to start and run initially
-        sleep 5
-        
-        # Stop MySQL container to simulate database failure
-        docker stop $(docker ps -q --filter "ancestor=mysql:8.0")
-        echo "MySQL stopped to simulate failure"
-        
-        # Let tests run with database down
-        sleep 5
-        
-        # Restart MySQL for remaining tests
-        docker start $(docker ps -aq --filter "ancestor=mysql:8.0")
-        echo "MySQL restarted"
-        
-        # Wait for MySQL to be ready again
-        until mysqladmin ping -h 127.0.0.1 -P 3306 --silent; do
-          echo 'Waiting for MySQL to restart...'
-          sleep 1
-        done
-        
-        # Re-create schema since container was restarted
-        node -e "
-        const { sequelize } = require('./models');
-        setTimeout(async () => {
-          try {
-            await sequelize.sync({ force: true });
-            console.log('✓ Schema recreated after restart');
-          } catch (err) {
-            console.error('Schema recreation failed:', err);
-          }
-        }, 2000);
-        "
-        
-        # Wait for test process to complete
-        wait $TEST_PID
-        TEST_EXIT_CODE=$?
-        
-        # Exit with test exit code
-        exit $TEST_EXIT_CODE
+        DB_HOST: ${{ secrets.DB_HOST_TEST }}
+        DB_PORT: ${{ secrets.DB_PORT_TEST }}
+        DB_NAME: ${{ secrets.DB_NAME_TEST }}
+        DB_USER: ${{ secrets.DB_USER_TEST }}
+        DB_PASS: ${{ secrets.DB_PASSWORD_TEST }}
+      run: npm run test:integration
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
