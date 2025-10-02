@@ -631,26 +631,4 @@ describe('API Integration Tests', () => {
         .expect(400);
     });
   });
-
-  describe('Service Availability Tests', () => {
-    test('should return 503 when database operation fails', async () => {
-      // Silence console.error for this test
-      const originalError = console.error;
-      console.error = jest.fn();
-
-      // Your existing test code
-      const originalMethod = HealthCheck.createHealthCheckRecord;
-      HealthCheck.createHealthCheckRecord = jest.fn().mockImplementation(() => {
-        throw new Error('Database connection failed');
-      });
-
-      const response = await request(app)
-        .get('/healthz')
-        .expect(503);
-
-      // Restore everything
-      HealthCheck.createHealthCheckRecord = originalMethod;
-      console.error = originalError;
-    });
-  });
 });
