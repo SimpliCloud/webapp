@@ -1,6 +1,6 @@
-# Cloud-Native Web Application - Assignment 2
+# Cloud-Native Web Application
 
-RESTful API implementation with user management and product CRUD operations using Node.js, Express, and MySQL.
+RESTful API with comprehensive integration testing and CI/CD pipeline implementation.
 
 ## Prerequisites
 
@@ -16,7 +16,8 @@ RESTful API implementation with user management and product CRUD operations usin
 - **ORM**: Sequelize
 - **Authentication**: Basic Auth (Token-based)
 - **Password Encryption**: BCrypt
-- **Testing**: Jest
+- **Testing**: Jest, SuperTest
+- **CI/CD**: GitHub Actions
 
 ## Setup Instructions
 
@@ -24,12 +25,13 @@ RESTful API implementation with user management and product CRUD operations usin
 
 ```bash
 git clone git@github.com:yourusername/yourrepo.git
-cd health-check-api
+cd webapp
 ```
 
 ### 2. Install Dependencies
 
 ```bash
+cd health-check-api
 npm install
 ```
 
@@ -68,7 +70,56 @@ npm run dev
 npm start
 ```
 
-The application will automatically create database tables on first run.
+## Testing
+
+### Run All Tests
+```bash
+npm test
+```
+
+### Run Unit Tests Only
+```bash
+npm run test:unit
+```
+
+### Run Integration Tests Only
+```bash
+npm run test:integration
+```
+
+### Run Tests with Coverage
+```bash
+npm run test:all
+```
+
+### Test Coverage
+- 42 integration tests covering all endpoints
+- Positive test cases (creation, retrieval, update, authentication)
+- Negative test cases (invalid input, authentication errors, not found)
+- Edge cases (boundary values, special characters, concurrent requests)
+- Overall coverage: ~62% statements, ~95% test pass rate
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflow
+The repository includes automated CI/CD using GitHub Actions:
+
+- **Trigger**: Pull requests to main branch
+- **Environment**: Ubuntu latest with MySQL 8.0 service
+- **Pipeline Steps**:
+  1. Checkout code
+  2. Setup Node.js 18
+  3. Install dependencies
+  4. Run unit tests
+  5. Run integration tests
+  6. Upload coverage reports
+
+### Branch Protection
+Main branch protection rules enforce:
+- Pull request required before merging
+- Status checks must pass
+- Tests must pass before merge
+- No direct commits to main
 
 ## API Documentation
 
@@ -78,7 +129,6 @@ http://localhost:8080
 ```
 
 ### Authentication
-
 Protected endpoints require Basic Authentication:
 ```
 Authorization: Basic base64(email:password)
@@ -110,46 +160,6 @@ Authorization: Basic base64(email:password)
 
 *Owner authorization required
 
-### Request/Response Examples
-
-#### Create User
-```bash
-curl -X POST http://localhost:8080/v1/user \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123",
-    "first_name": "John",
-    "last_name": "Doe"
-  }'
-```
-
-Response (201):
-```json
-{
-  "id": "uuid",
-  "email": "user@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "account_created": "2025-01-01T00:00:00.000Z",
-  "account_updated": "2025-01-01T00:00:00.000Z"
-}
-```
-
-#### Create Product
-```bash
-curl -X POST http://localhost:8080/v1/product \
-  -H "Authorization: Basic base64string" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Laptop",
-    "description": "High-performance laptop",
-    "sku": "LAP-001",
-    "manufacturer": "TechCorp",
-    "quantity": 10
-  }'
-```
-
 ### Status Codes
 
 | Code | Description |
@@ -163,61 +173,82 @@ curl -X POST http://localhost:8080/v1/product \
 | 404 | Not found |
 | 405 | Method not allowed |
 
-## Testing
-
-Run test suite:
-```bash
-npm test
-```
-
-Run with coverage:
-```bash
-npm test -- --coverage
-```
-
 ## Project Structure
 
 ```
-.
-├── config/
-│   └── database.js
-├── middleware/
-│   ├── auth.js
-│   └── validation.js
-├── models/
-│   ├── index.js
-│   ├── User.js
-│   ├── Product.js
-│   └── HealthCheck.js
-├── routes/
-│   ├── health.js
-│   ├── users.js
-│   └── products.js
-├── tests/
-│   ├── health.test.js
-│   ├── users.test.js
-│   └── products.test.js
-├── .env.example
-├── .gitignore
-├── jest.config.js
-├── package.json
-├── README.md
-└── server.js
+webapp/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+└── health-check-api/
+    ├── config/
+    │   └── database.js
+    ├── middleware/
+    │   ├── auth.js
+    │   └── validation.js
+    ├── models/
+    │   ├── index.js
+    │   ├── User.js
+    │   ├── Product.js
+    │   └── HealthCheck.js
+    ├── routes/
+    │   ├── health.js
+    │   ├── users.js
+    │   └── products.js
+    ├── tests/
+    │   ├── health.test.js
+    │   ├── users.test.js
+    │   ├── products.test.js
+    │   └── integration/
+    │       └── api.test.js
+    ├── .env.example
+    ├── .gitignore
+    ├── jest.config.js
+    ├── package.json
+    ├── README.md
+    └── server.js
 ```
+
+## Test Categories Implemented
+
+### A. Positive Test Cases
+- User and product creation with valid data
+- Successful retrieval by ID
+- Full and partial updates
+- Authentication with valid credentials
+
+### B. Negative Test Cases
+- Missing required fields
+- Invalid email format
+- Duplicate email/SKU
+- Invalid credentials
+- Non-existent resources
+- Wrong HTTP methods
+
+### C. Edge Cases
+- Boundary values (min/max strings, 0-100 quantity)
+- Special characters handling
+- Unicode support
+- Concurrent request handling
+- Data integrity verification
 
 ## Security Features
 
 - BCrypt password hashing with salt
-- Basic Authentication (token-based, stateless)
+- Basic Authentication (stateless)
 - Input validation and sanitization
-- SQL injection prevention via Sequelize ORM
-- Protected system fields (account_created, account_updated)
+- SQL injection prevention
+- Protected system fields
 - Ownership-based access control
+
+## Running Tests in CI
+
+Tests automatically run on every pull request. To view results:
+1. Create a pull request
+2. Check the "Checks" tab
+3. View GitHub Actions workflow status
+4. All tests must pass for merge
 
 ## Author
 
 Vatsal Naik
-
-## License
-
-MIT
