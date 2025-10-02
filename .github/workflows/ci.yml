@@ -1,6 +1,5 @@
 name: CI
 
-# Trigger on pull requests to main branch
 on:
   pull_request:
     branches: [ main ]
@@ -11,7 +10,6 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     
-    # MySQL service container
     services:
       mysql:
         image: mysql:8.0
@@ -28,10 +26,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
@@ -63,6 +61,28 @@ jobs:
         echo "DB_PASS=root" >> .env
         echo "PORT=8080" >> .env
 
+    - name: Setup database schema
+      env:
+        NODE_ENV: test
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: health_check_db
+        DB_USER: root
+        DB_PASS: root
+      run: |
+        node -e "
+        const { sequelize } = require('./models');
+        sequelize.sync({ force: true })
+          .then(() => {
+            console.log('✓ Database schema created successfully');
+            process.exit(0);
+          })
+          .catch(err => {
+            console.error('✗ Failed to create schema:', err);
+            process.exit(1);
+          });
+        "
+
     - name: Run unit tests
       env:
         NODE_ENV: test
@@ -84,7 +104,7 @@ jobs:
       run: npm run test:integration
 
     - name: Upload coverage reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: coverage-report

@@ -1,6 +1,7 @@
 const User = require('./User');
 const Product = require('./Product');
 const HealthCheck = require('./HealthCheck');
+const { sequelize } = require('../config/database');
 
 // Define associations
 User.hasMany(Product, {
@@ -18,5 +19,6 @@ Product.belongsTo(User, {
 module.exports = {
   User,
   Product,
-  HealthCheck
+  HealthCheck,
+  sequelize
 };
