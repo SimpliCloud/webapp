@@ -10,7 +10,6 @@
     "test:watch": "jest --watch",
     "test:unit": "jest tests/*.test.js --coverage",
     "test:integration": "cross-env NODE_ENV=test jest tests/integration/*.test.js --coverage --forceExit",
-    "test:503": "jest tests/integration/503-test.js --forceExit",
     "test:all": "jest --coverage --forceExit"
   },
   "keywords": [

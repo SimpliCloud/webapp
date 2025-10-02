@@ -93,7 +93,7 @@ jobs:
         DB_PASS: root
       run: npm run test:unit
 
-    - name: Run integration tests
+    - name: Run integration tests with database failure simulation
       env:
         NODE_ENV: test
         DB_HOST: 127.0.0.1
@@ -101,13 +101,50 @@ jobs:
         DB_NAME: health_check_db
         DB_USER: root
         DB_PASS: root
-      run: npm run test:integration
-    
-    - name: Run 503 test
       run: |
-        # Run test that will stop/start MySQL
-        sudo npm run test:503
-      continue-on-error: true  # Don't fail build if this test has issues
+        # Start integration tests in background
+        npm run test:integration &
+        TEST_PID=$!
+        
+        # Wait for tests to start and run initially
+        sleep 5
+        
+        # Stop MySQL container to simulate database failure
+        docker stop $(docker ps -q --filter "ancestor=mysql:8.0")
+        echo "MySQL stopped to simulate failure"
+        
+        # Let tests run with database down
+        sleep 5
+        
+        # Restart MySQL for remaining tests
+        docker start $(docker ps -aq --filter "ancestor=mysql:8.0")
+        echo "MySQL restarted"
+        
+        # Wait for MySQL to be ready again
+        until mysqladmin ping -h 127.0.0.1 -P 3306 --silent; do
+          echo 'Waiting for MySQL to restart...'
+          sleep 1
+        done
+        
+        # Re-create schema since container was restarted
+        node -e "
+        const { sequelize } = require('./models');
+        setTimeout(async () => {
+          try {
+            await sequelize.sync({ force: true });
+            console.log('✓ Schema recreated after restart');
+          } catch (err) {
+            console.error('Schema recreation failed:', err);
+          }
+        }, 2000);
+        "
+        
+        # Wait for test process to complete
+        wait $TEST_PID
+        TEST_EXIT_CODE=$?
+        
+        # Exit with test exit code
+        exit $TEST_EXIT_CODE
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
