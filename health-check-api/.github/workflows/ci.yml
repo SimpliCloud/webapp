@@ -1,0 +1,96 @@
+name: CI
+
+# Trigger on pull requests to main branch
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    # MySQL service container
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: health_check_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Wait for MySQL
+      run: |
+        until mysqladmin ping -h 127.0.0.1 -P 3306 --silent; do
+          echo 'Waiting for MySQL...'
+          sleep 2
+        done
+
+    - name: Setup test environment
+      env:
+        NODE_ENV: test
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: health_check_db
+        DB_USER: root
+        DB_PASS: root
+      run: |
+        echo "NODE_ENV=test" > .env
+        echo "DB_HOST=127.0.0.1" >> .env
+        echo "DB_PORT=3306" >> .env
+        echo "DB_NAME=health_check_db" >> .env
+        echo "DB_USER=root" >> .env
+        echo "DB_PASS=root" >> .env
+        echo "PORT=8080" >> .env
+
+    - name: Run unit tests
+      env:
+        NODE_ENV: test
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: health_check_db
+        DB_USER: root
+        DB_PASS: root
+      run: npm run test:unit
+
+    - name: Run integration tests
+      env:
+        NODE_ENV: test
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: health_check_db
+        DB_USER: root
+        DB_PASS: root
+      run: npm run test:integration
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-report
+        path: coverage/
+
+    - name: Check test coverage
+      run: |
+        npm test -- --coverage --coverageReporters=text-summary
+        echo "Test coverage report generated"
