@@ -232,6 +232,13 @@ webapp/
 - Concurrent request handling
 - Data integrity verification
 
+### D. Service Availability Test
+- **Test**: Database connection failure handling
+- **Method**: Mock database operation to simulate failure
+- **Expected**: Returns 503 when database is unavailable
+- **Purpose**: Ensures graceful degradation when database connectivity is lost
+- **Implementation**: Mocks `HealthCheck.createHealthCheckRecord` to throw error, verifying the service correctly returns 503 status without crashing
+
 ## Security Features
 
 - BCrypt password hashing with salt
