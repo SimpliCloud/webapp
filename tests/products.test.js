@@ -3,6 +3,8 @@ const app = require('../server');
 const { sequelize } = require('../config/database');
 const User = require('../models/User');
 const Product = require('../models/Product');
+const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcrypt');
 
 describe('Product Management Endpoints', () => {
     let user1 = {
@@ -35,9 +37,15 @@ describe('Product Management Endpoints', () => {
         await Product.destroy({ where: {} });
         await User.destroy({ where: {} });
 
-        // Create test users
-        await request(app).post('/v1/user').send(user1);
-        await request(app).post('/v1/user').send(user2);
+        // Create test users via API
+        const user1Response = await request(app)
+            .post('/v1/user')
+            .send(user1);
+
+        const user2Response = await request(app)
+            .post('/v1/user')
+            .send(user2);
+
 
         // Create auth tokens
         authToken1 = Buffer.from(`${user1.email}:${user1.password}`).toString('base64');
