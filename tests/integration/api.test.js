@@ -321,11 +321,12 @@ describe('API Integration Tests', () => {
       });
 
       test('should return 404 when deleting non-existent product', async () => {
-        const fakeId = '77777777-7777-4777-7777-777777777777';
+        const fakeId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
         await request(app)
           .delete(`/v1/product/${fakeId}`)
           .set('Authorization', `Basic ${authToken1}`)
-          .expect(400);
+          .set('Content-Length', '0') 
+          .expect(404);
       });
     });
 
