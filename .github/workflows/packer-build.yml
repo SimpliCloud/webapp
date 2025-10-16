@@ -96,7 +96,7 @@ jobs:
             -x "*.github*" \
             -x "packer/*" \
             -x "scripts/*" \
-            -x "test/*" \
+            -x "test/integration/*" \
             -x "*.md" \
             -x ".env.example"
       

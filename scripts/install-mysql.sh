@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Installing MySQL Server..."
+echo "Installing MySQL Server...."
 
 # Install MySQL
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-server
