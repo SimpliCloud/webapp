@@ -3,7 +3,6 @@ set -e
 
 echo "Setting up web application..."
 
-
 # Copy application files
 sudo cp -r /tmp/webapp/* /opt/csye6225/webapp/ || true
 sudo cp -r /tmp/webapp/.[^.]* /opt/csye6225/webapp/ 2>/dev/null || true
@@ -27,7 +26,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=health_check_db
 DB_USER=csye6225
-DB_PASSWORD=MyPassword@123
+DB_PASS=MyPassword@123
 DB_DIALECT=mysql
 EOF
 
@@ -40,4 +39,4 @@ sudo chmod -R 640 /opt/csye6225/webapp/*
 sudo chmod 750 /opt/csye6225/webapp
 sudo chmod 600 /opt/csye6225/webapp/.env
 
-echo "Application setup completed"
+echo "Application setup completed..."

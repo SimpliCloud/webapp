@@ -45,16 +45,31 @@ jobs:
             sleep 2
           done
       
+      - name: Create test env file
+        run: |
+          cat > .env << EOF
+          NODE_ENV=test
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_NAME=health_check_db
+          DB_USER=csye6225
+          DB_PASS=password123
+          DB_DIALECT=mysql
+          EOF
+      
+      - name: Verify database connection
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u csye6225 -ppassword123 health_check_db -e "SELECT 1"
+      
       - name: Run integration tests
         env:
+          NODE_ENV: test
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_NAME: health_check_db
           DB_USER: csye6225
-          DB_PASSWORD: password123
+          DB_PASS: password123
           DB_DIALECT: mysql
-          NODE_ENV: test
-          DATABASE_URL: mysql://csye6225:password123@127.0.0.1:3306/health_check_db
         run: npm test
   
   build-artifact:
