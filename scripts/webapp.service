@@ -1,0 +1,30 @@
+[Unit]
+Description=CSYE6225 Web Application
+Documentation=https://github.com/your-org/webapp
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=csye6225
+Group=csye6225
+WorkingDirectory=/opt/csye6225/webapp
+ExecStart=/usr/bin/node /opt/csye6225/webapp/server.js
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/csye6225/logs/webapp.log
+StandardError=append:/opt/csye6225/logs/webapp-error.log
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/csye6225/logs
+
+# Environment variables
+Environment="NODE_ENV=production"
+EnvironmentFile=/opt/csye6225/webapp/.env
+
+[Install]
+WantedBy=multi-user.target
