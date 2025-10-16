@@ -35,8 +35,7 @@ EOF
 # Set ownership AFTER all file operations
 sudo chown -R csye6225:csye6225 /opt/csye6225
 
-# Install dependencies using sudo to run as csye6225
-cd /opt/csye6225
-sudo -u csye6225 npm ci --only=production
+# Install dependencies - run the command in a subshell with sudo
+sudo bash -c "cd /opt/csye6225 && sudo -u csye6225 npm ci --only=production"
 
 echo "Application setup completed"
