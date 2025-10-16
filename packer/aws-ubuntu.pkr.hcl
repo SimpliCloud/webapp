@@ -151,7 +151,7 @@ build {
     ]
   }
 
-  # Final cleanup
+  # Final cleanup...
   provisioner "shell" {
     inline = [
       "sudo apt-get autoremove -y",
