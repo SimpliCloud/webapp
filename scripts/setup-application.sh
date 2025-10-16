@@ -39,4 +39,4 @@ sudo chmod -R 640 /opt/csye6225/webapp/*
 sudo chmod 750 /opt/csye6225/webapp
 sudo chmod 600 /opt/csye6225/webapp/.env
 
-echo "Application setup completed"
+echo "Application setup completed..."
