@@ -3,51 +3,47 @@ set -e
 
 echo "Setting up web application..."
 
-# Check what's in /tmp
-echo "Contents of /tmp:"
-ls -la /tmp
+# Clean and prepare application directory
+sudo rm -rf /opt/csye6225/*
+sudo mkdir -p /opt/csye6225/logs
 
-# Create the application directory
-sudo mkdir -p /opt/csye6225
+# Copy application files from /tmp
+echo "Copying application files..."
+sudo cp -r /tmp/*.js /opt/csye6225/ 2>/dev/null || true
+sudo cp -r /tmp/*.json /opt/csye6225/ 2>/dev/null || true
+sudo cp -r /tmp/config /opt/csye6225/ 2>/dev/null || true
+sudo cp -r /tmp/middleware /opt/csye6225/ 2>/dev/null || true
+sudo cp -r /tmp/models /opt/csye6225/ 2>/dev/null || true
+sudo cp -r /tmp/routes /opt/csye6225/ 2>/dev/null || true
 
-# Copy application files from /tmp to /opt/csye6225
-sudo cp -r /tmp/* /opt/csye6225/ || true
-sudo cp -r /tmp/.[^.]* /opt/csye6225/ 2>/dev/null || true
+# Create production .env file with correct database credentials
+sudo tee /opt/csye6225/.env > /dev/null << 'EOF'
+# Application Environment
+NODE_ENV=production
+PORT=8080
 
-# Remove unnecessary files
-sudo rm -rf /opt/csye6225/node_modules 2>/dev/null || true
-sudo rm -rf /opt/csye6225/packer 2>/dev/null || true
+# Database Configuration - matching install-mysql.sh
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=health_check_db
+DB_USER=csye6225
+DB_PASS=MyPassword@123
 
-# Set ownership BEFORE trying to access
-sudo chown -R csye6225:csye6225 /opt/csye6225
+# Database Connection Pool
+DB_POOL_MAX=10
+DB_POOL_MIN=0
+DB_POOL_ACQUIRE=30000
+DB_POOL_IDLE=10000
 
-# Now you can work in the directory
-cd /opt/csye6225
-
-# Install dependencies as csye6225 user
-sudo -u csye6225 npm ci --only=production
-
-# Create systemd service file
-sudo tee /etc/systemd/system/csye6225-webapp.service > /dev/null << 'EOF'
-[Unit]
-Description=CSYE6225 Web Application
-After=network.target mysql.service
-
-[Service]
-Type=simple
-User=csye6225
-Group=csye6225
-WorkingDirectory=/opt/csye6225
-ExecStart=/usr/bin/node server.js
-Restart=always
-Environment="NODE_ENV=production"
-
-[Install]
-WantedBy=multi-user.target
+# BCrypt Configuration
+BCRYPT_SALT_ROUNDS=10
 EOF
 
-# Enable the service
-sudo systemctl daemon-reload
-sudo systemctl enable csye6225-webapp.service
+# Set ownership
+sudo chown -R csye6225:csye6225 /opt/csye6225
+
+# Install dependencies
+cd /opt/csye6225
+sudo -u csye6225 npm ci --only=production
 
 echo "Application setup completed"
