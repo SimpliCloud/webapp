@@ -3,55 +3,51 @@ set -e
 
 echo "Setting up web application..."
 
-# Debug: Show what's in /tmp
+# Check what's in /tmp
 echo "Contents of /tmp:"
-ls -la /tmp/
+ls -la /tmp
 
-# The files are directly in /tmp/ (not in a subdirectory)
-SOURCE_DIR="/tmp"
+# Create the application directory
+sudo mkdir -p /opt/csye6225
 
-# Verify package.json exists
-if [ ! -f "$SOURCE_DIR/package.json" ]; then
-    echo "Error: package.json not found in $SOURCE_DIR"
-    exit 1
-fi
+# Copy application files from /tmp to /opt/csye6225
+sudo cp -r /tmp/* /opt/csye6225/ || true
+sudo cp -r /tmp/.[^.]* /opt/csye6225/ 2>/dev/null || true
 
-echo "Using source directory: $SOURCE_DIR"
+# Remove unnecessary files
+sudo rm -rf /opt/csye6225/node_modules 2>/dev/null || true
+sudo rm -rf /opt/csye6225/packer 2>/dev/null || true
 
-# Copy application files as root (excluding system directories)
-sudo cp -r $SOURCE_DIR/config /opt/csye6225/webapp/ || true
-sudo cp -r $SOURCE_DIR/middleware /opt/csye6225/webapp/ || true
-sudo cp -r $SOURCE_DIR/models /opt/csye6225/webapp/ || true
-sudo cp -r $SOURCE_DIR/routes /opt/csye6225/webapp/ || true
-sudo cp -r $SOURCE_DIR/node_modules /opt/csye6225/webapp/ || true
-sudo cp $SOURCE_DIR/package*.json /opt/csye6225/webapp/ || true
-sudo cp $SOURCE_DIR/server.js /opt/csye6225/webapp/ || true
-sudo cp $SOURCE_DIR/jest.config.js /opt/csye6225/webapp/ || true
-
-# Install application dependencies as root first
-cd /opt/csye6225/webapp
-sudo npm ci --production
-
-# Create production .env file
-sudo tee /opt/csye6225/webapp/.env > /dev/null <<EOF
-NODE_ENV=production
-PORT=8080
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=health_check_db
-DB_USER=csye6225
-DB_PASS=MyPassword@123
-DB_DIALECT=mysql
-EOF
-
-# Set correct ownership for everything
+# Set ownership BEFORE trying to access
 sudo chown -R csye6225:csye6225 /opt/csye6225
 
-# Set proper permissions
-sudo chmod 750 /opt/csye6225
-sudo chmod 750 /opt/csye6225/webapp
-sudo find /opt/csye6225/webapp -type f -exec chmod 640 {} \;
-sudo find /opt/csye6225/webapp -type d -exec chmod 750 {} \;
-sudo chmod 600 /opt/csye6225/webapp/.env
+# Now you can work in the directory
+cd /opt/csye6225
+
+# Install dependencies as csye6225 user
+sudo -u csye6225 npm ci --only=production
+
+# Create systemd service file
+sudo tee /etc/systemd/system/csye6225-webapp.service > /dev/null << 'EOF'
+[Unit]
+Description=CSYE6225 Web Application
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=csye6225
+Group=csye6225
+WorkingDirectory=/opt/csye6225
+ExecStart=/usr/bin/node server.js
+Restart=always
+Environment="NODE_ENV=production"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable the service
+sudo systemctl daemon-reload
+sudo systemctl enable csye6225-webapp.service
 
 echo "Application setup completed"
