@@ -10,7 +10,7 @@ sudo groupadd -f csye6225
 sudo useradd -r -g csye6225 -s /usr/sbin/nologin -d /opt/csye6225 -m csye6225 || true
 
 # Create application directory structure
-sudo mkdir -p /opt/csye6225/webapp
+sudo mkdir -p /opt/csye6225
 sudo mkdir -p /opt/csye6225/logs
 
 # Set ownership
