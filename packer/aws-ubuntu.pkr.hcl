@@ -121,8 +121,15 @@ build {
 
   # Copy application files
   provisioner "file" {
+    inline = [
+      "sudo rm -rf /tmp/webapp",
+      "mkdir -p /tmp/webapp"
+    ]
+  }
+
+  provisioner "file" {
     source      = "../"
-    destination = "/tmp/webapp"
+    destination = "/tmp/"
   }
 
   # Setup application
