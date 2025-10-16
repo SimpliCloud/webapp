@@ -13,43 +13,43 @@ jobs:
   # Temporarily simplified test job
   basic-validation:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Check application can start
         run: |
           # Just verify the app doesn't crash on startup
           timeout 5s node -e "require('./server.js')" || true
           echo "Application startup check completed"
-  
+
   build-artifact:
     needs: basic-validation
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: Install production dependencies
         run: npm ci --production
-      
+
       - name: Create deployment package
         run: |
           zip -r webapp.zip . \
@@ -62,61 +62,66 @@ jobs:
             -x "*.md" \
             -x ".env.example" \
             -x "*.test.js"
-      
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: webapp.zip
           retention-days: 1
-  
+
   build-ami:
     needs: build-artifact
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
-      
+
       - name: Extract artifact
         run: |
           unzip -o webapp.zip
           rm webapp.zip
-      
+
       - name: Setup Packer
         uses: hashicorp/setup-packer@main
         with:
-          version: 'latest'
-      
+          version: "latest"
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
-      
+
       - name: Get default VPC ID
         id: vpc
         run: |
           VPC_ID=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query "Vpcs[0].VpcId" --output text)
           echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
-      
+
       - name: Get subnet ID
         id: subnet
         run: |
           SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${{ steps.vpc.outputs.vpc_id }}" --query "Subnets[0].SubnetId" --output text)
           echo "subnet_id=$SUBNET_ID" >> $GITHUB_OUTPUT
-      
+
       - name: Packer Init
         run: |
           cd packer
           packer init .
-      
+
+      - name: Prepare build directory
+        run: |
+          # Copy scripts to packer directory for easier access
+          cp -r scripts packer/
+
       - name: Build AMI
         env:
           PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
@@ -125,7 +130,7 @@ jobs:
         run: |
           cd packer
           packer build -color=false .
-      
+
       - name: Get AMI ID
         id: ami
         run: |
@@ -136,13 +141,13 @@ jobs:
             --output text)
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
           echo "AMI Created: $AMI_ID"
-      
+
       - name: Create AMI artifact
         run: |
           echo "AMI_ID=${{ steps.ami.outputs.ami_id }}" > ami-id.txt
           echo "REGION=${{ vars.AWS_REGION }}" >> ami-id.txt
           echo "TIMESTAMP=$(date -u +%Y%m%d%H%M%S)" >> ami-id.txt
-      
+
       - name: Upload AMI ID artifact
         uses: actions/upload-artifact@v4
         with:

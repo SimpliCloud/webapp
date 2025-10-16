@@ -106,17 +106,17 @@ build {
 
   # Install MySQL
   provisioner "shell" {
-    script = "../scripts/install-mysql.sh"
+    script = "scripts/install-mysql.sh"
   }
 
   # Install Node.js
   provisioner "shell" {
-    script = "../scripts/install-nodejs.sh"
+    script = "scripts/install-nodejs.sh"
   }
 
   # Create user and setup application directory
   provisioner "shell" {
-    script = "../scripts/setup-user.sh"
+    script = "scripts/setup-user.sh"
   }
 
   # Copy application files
@@ -127,12 +127,12 @@ build {
 
   # Setup application
   provisioner "shell" {
-    script = "../scripts/setup-application.sh"
+    script = "scripts/setup-application.sh"
   }
 
   # Configure systemd service
   provisioner "file" {
-    source      = "../scripts/webapp.service"
+    source      = "scripts/webapp.service"
     destination = "/tmp/webapp.service"
   }
 
