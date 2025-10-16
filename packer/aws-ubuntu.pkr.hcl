@@ -119,7 +119,7 @@ build {
     script = "../scripts/setup-user.sh"
   }
 
-# Copy application files
+  # Copy application files
   provisioner "shell" {
     inline = [
       "sudo rm -rf /tmp/webapp",
@@ -131,7 +131,7 @@ build {
     source      = "../"
     destination = "/tmp/"
   }
-  
+
   # Setup application
   provisioner "shell" {
     script = "../scripts/setup-application.sh"
