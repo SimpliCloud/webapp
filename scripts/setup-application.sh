@@ -3,6 +3,7 @@ set -e
 
 echo "Setting up web application..."
 
+
 # Copy application files
 sudo cp -r /tmp/webapp/* /opt/csye6225/webapp/ || true
 sudo cp -r /tmp/webapp/.[^.]* /opt/csye6225/webapp/ 2>/dev/null || true
