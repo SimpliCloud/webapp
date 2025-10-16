@@ -13,7 +13,7 @@ sudo systemctl enable mysql
 echo "Configuring MySQL..."
 
 # Use sudo to access MySQL without password initially
-# MySQL 8.0 on Ubuntu uses auth_socket by default for root
+
 sudo mysql <<EOF
 -- Change root authentication method and set password
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'Root@123';
