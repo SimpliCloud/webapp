@@ -1,16 +1,19 @@
 # Cloud-Native Web Application
 
-RESTful API with comprehensive integration testing and CI/CD pipeline implementation.
+RESTful API with automated AMI building, infrastructure as code, and CI/CD pipeline implementation.
 
 ## Prerequisites
 
-- Node.js 18.0 or higher
+- Node.js 20.x LTS
 - MySQL 8.0 or higher
 - Git
+- Packer (for AMI building)
+- Terraform (for infrastructure deployment)
+- AWS CLI configured with appropriate profiles
 
 ## Technology Stack
 
-- **Runtime**: Node.js
+- **Runtime**: Node.js 20.x
 - **Framework**: Express.js
 - **Database**: MySQL 8.0
 - **ORM**: Sequelize
@@ -18,20 +21,65 @@ RESTful API with comprehensive integration testing and CI/CD pipeline implementa
 - **Password Encryption**: BCrypt
 - **Testing**: Jest, SuperTest
 - **CI/CD**: GitHub Actions
+- **Infrastructure**: Packer, Terraform, AWS
 
-## Setup Instructions
+## Repository Structure
+
+```
+webapp/
+├── .github/
+│   └── workflows/
+│       ├── packer-status-check.yml  # Packer validation on PR
+│       └── packer-build.yml         # AMI build on merge
+├── config/
+│   └── database.js
+├── middleware/
+│   ├── auth.js
+│   └── validation.js
+├── models/
+│   ├── index.js
+│   ├── User.js
+│   ├── Product.js
+│   └── HealthCheck.js
+├── packer/
+│   └── aws-ubuntu.pkr.hcl          # Packer template for AMI
+├── routes/
+│   ├── health.js
+│   ├── users.js
+│   └── products.js
+├── scripts/
+│   ├── install-mysql.sh            # MySQL installation script
+│   ├── install-nodejs.sh           # Node.js installation script
+│   ├── setup-user.sh               # User creation script
+│   ├── setup-application.sh        # Application setup script
+│   └── webapp.service              # Systemd service file
+├── tests/
+│   ├── health.test.js
+│   ├── users.test.js
+│   ├── products.test.js
+│   └── integration/
+│       └── api.test.js
+├── .env.example
+├── .gitignore
+├── jest.config.js
+├── package.json
+├── package-lock.json
+├── README.md
+└── server.js
+```
+
+## Local Development Setup
 
 ### 1. Clone Repository
 
 ```bash
-git clone git@github.com:yourusername/yourrepo.git
+git clone git@github.com:yourusername/webapp.git
 cd webapp
 ```
 
 ### 2. Install Dependencies
 
 ```bash
-cd health-check-api
 npm install
 ```
 
@@ -40,24 +88,28 @@ npm install
 Create MySQL database:
 ```sql
 CREATE DATABASE health_check_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'csye6225'@'localhost' IDENTIFIED BY 'MyPassword@123';
+GRANT ALL PRIVILEGES ON health_check_db.* TO 'csye6225'@'localhost';
+FLUSH PRIVILEGES;
 ```
 
 ### 4. Environment Configuration
 
-Create `.env` file from template:
+Create `.env` file:
 ```bash
 cp .env.example .env
 ```
 
-Configure the following variables:
+Configure variables:
 ```
 NODE_ENV=development
 PORT=8080
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=health_check_db
-DB_USER=root
-DB_PASS=yourpassword
+DB_USER=csye6225
+DB_PASS=MyPassword@123
+DB_DIALECT=mysql
 ```
 
 ### 5. Run Application
@@ -70,62 +122,46 @@ npm run dev
 npm start
 ```
 
-## Testing
+## AMI Building with Packer
 
-### Run All Tests
+### Prerequisites
+- AWS CLI configured with dev profile
+- Packer installed locally
+- GitHub Actions secrets configured
+
+### Build AMI Locally
+
 ```bash
-npm test
+cd packer
+packer init .
+packer validate .
+packer build aws-ubuntu.pkr.hcl
 ```
 
-### Run Unit Tests Only
-```bash
-npm run test:unit
-```
+### Automated AMI Building
 
-### Run Integration Tests Only
-```bash
-npm run test:integration
-```
+AMIs are automatically built via GitHub Actions when PRs are merged to main:
+1. Packer format and validation checks run on PR
+2. AMI build triggers on merge
+3. AMI is shared between dev and demo AWS accounts
 
-### Run Tests with Coverage
-```bash
-npm run test:all
-```
+### AMI Contents
+- Ubuntu 24.04 LTS base
+- MySQL 8.0 (local installation)
+- Node.js 20.x LTS
+- Application code and dependencies
+- Systemd service for auto-start
+- csye6225 user with nologin shell
 
-### Test Coverage
-- 42 integration tests covering all endpoints
-- Positive test cases (creation, retrieval, update, authentication)
-- Negative test cases (invalid input, authentication errors, not found)
-- Edge cases (boundary values, special characters, concurrent requests)
-- Overall coverage: ~62% statements, ~95% test pass rate
+## Infrastructure Deployment
 
-## CI/CD Pipeline
-
-### GitHub Actions Workflow
-The repository includes automated CI/CD using GitHub Actions:
-
-- **Trigger**: Pull requests to main branch
-- **Environment**: Ubuntu latest with MySQL 8.0 service
-- **Pipeline Steps**:
-  1. Checkout code
-  2. Setup Node.js 18
-  3. Install dependencies
-  4. Run unit tests
-  5. Run integration tests
-  6. Upload coverage reports
-
-### Branch Protection
-Main branch protection rules enforce:
-- Pull request required before merging
-- Status checks must pass
-- Tests must pass before merge
-- No direct commits to main
+Infrastructure is managed in the separate `tf-aws-infra` repository using Terraform.
 
 ## API Documentation
 
 ### Base URL
 ```
-http://localhost:8080
+http://<ec2-public-ip>:8080
 ```
 
 ### Authentication
@@ -145,9 +181,8 @@ Authorization: Basic base64(email:password)
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | /v1/user | No | Create user account |
-| GET | /v1/user/:userId | Yes | Get user information |
-| PUT | /v1/user/:userId | Yes | Update all user fields |
-| PATCH | /v1/user/:userId | Yes | Update specific fields |
+| GET | /v1/user/self | Yes | Get authenticated user info |
+| PUT | /v1/user/self | Yes | Update all user fields |
 
 #### Product Management
 | Method | Endpoint | Auth | Description |
@@ -173,82 +208,73 @@ Authorization: Basic base64(email:password)
 | 404 | Not found |
 | 405 | Method not allowed |
 
-## Project Structure
+## Testing
 
-```
-webapp/
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-└── health-check-api/
-    ├── config/
-    │   └── database.js
-    ├── middleware/
-    │   ├── auth.js
-    │   └── validation.js
-    ├── models/
-    │   ├── index.js
-    │   ├── User.js
-    │   ├── Product.js
-    │   └── HealthCheck.js
-    ├── routes/
-    │   ├── health.js
-    │   ├── users.js
-    │   └── products.js
-    ├── tests/
-    │   ├── health.test.js
-    │   ├── users.test.js
-    │   ├── products.test.js
-    │   └── integration/
-    │       └── api.test.js
-    ├── .env.example
-    ├── .gitignore
-    ├── jest.config.js
-    ├── package.json
-    ├── README.md
-    └── server.js
+### Run All Tests
+```bash
+npm test
 ```
 
-## Test Categories Implemented
+### Test Coverage
+- Unit and integration tests for all endpoints
+- GitHub Actions CI runs tests on every PR
+- Coverage: ~65% statements
 
-### A. Positive Test Cases
-- User and product creation with valid data
-- Successful retrieval by ID
-- Full and partial updates
-- Authentication with valid credentials
+## CI/CD Pipeline
 
-### B. Negative Test Cases
-- Missing required fields
-- Invalid email format
-- Duplicate email/SKU
-- Invalid credentials
-- Non-existent resources
-- Wrong HTTP methods
+### GitHub Actions Workflows
 
-### C. Edge Cases
-- Boundary values (min/max strings, 0-100 quantity)
-- Special characters handling
-- Unicode support
-- Concurrent request handling
-- Data integrity verification
+#### Packer Status Check (`packer-status-check.yml`)
+- Triggers: Pull requests modifying packer files
+- Validates Packer template formatting
+- Validates Packer configuration
+- Blocks merge on validation failure
+
+#### AMI Build (`packer-build.yml`)
+- Triggers: Merge to main branch
+- Runs integration tests
+- Builds application artifact
+- Creates AMI in dev account
+- Shares AMI with demo account
+
+### Branch Protection
+- Pull request required before merging
+- Status checks must pass
+- Packer validation must pass
+- No direct commits to main
 
 ## Security Features
 
-- BCrypt password hashing with salt
+- BCrypt password hashing with salt rounds
 - Basic Authentication (stateless)
 - Input validation and sanitization
-- SQL injection prevention
-- Protected system fields
-- Ownership-based access control
+- SQL injection prevention (Sequelize ORM)
+- System fields protection (account_created, account_updated)
+- Ownership-based access control for products
+- No git installed in production AMI
+- Application runs as non-privileged user (csye6225)
+- Database port (3306) not exposed externally
 
-## Running Tests in CI
+## Production Deployment
 
-Tests automatically run on every pull request. To view results:
-1. Create a pull request
-2. Check the "Checks" tab
-3. View GitHub Actions workflow status
-4. All tests must pass for merge
+1. AMI is built automatically via GitHub Actions
+2. Infrastructure deployed via Terraform (see tf-aws-infra repo)
+3. Application starts automatically via systemd
+4. No manual intervention required
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| NODE_ENV | Environment mode | development |
+| PORT | Application port | 8080 |
+| DB_HOST | Database host | localhost |
+| DB_PORT | Database port | 3306 |
+| DB_NAME | Database name | health_check_db |
+| DB_USER | Database user | csye6225 |
+| DB_PASS | Database password | - |
+| DB_DIALECT | Database dialect | mysql |
 
 ## Author
 
-Vatsal Naik
+Vatsal Naik - CSYE 6225 Cloud Computing
