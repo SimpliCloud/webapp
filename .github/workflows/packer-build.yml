@@ -117,10 +117,10 @@ jobs:
           cd packer
           packer init .
 
-      - name: Prepare build directory
-        run: |
-          # Copy scripts to packer directory for easier access
-          cp -r scripts packer/
+      # - name: Prepare build directory
+      #   run: |
+      #     # Copy scripts to packer directory for easier access
+      #     cp -r scripts packer/
 
       - name: Build AMI
         env:
