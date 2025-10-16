@@ -16,33 +16,26 @@ sudo cp -r /tmp/middleware /opt/csye6225/ 2>/dev/null || true
 sudo cp -r /tmp/models /opt/csye6225/ 2>/dev/null || true
 sudo cp -r /tmp/routes /opt/csye6225/ 2>/dev/null || true
 
-# Create production .env file with correct database credentials
+# Create production .env file
 sudo tee /opt/csye6225/.env > /dev/null << 'EOF'
-# Application Environment
 NODE_ENV=production
 PORT=8080
-
-# Database Configuration - matching install-mysql.sh
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=health_check_db
 DB_USER=csye6225
 DB_PASS=MyPassword@123
-
-# Database Connection Pool
 DB_POOL_MAX=10
 DB_POOL_MIN=0
 DB_POOL_ACQUIRE=30000
 DB_POOL_IDLE=10000
-
-# BCrypt Configuration
 BCRYPT_SALT_ROUNDS=10
 EOF
 
-# Set ownership
+# Set ownership AFTER all file operations
 sudo chown -R csye6225:csye6225 /opt/csye6225
 
-# Install dependencies
+# Install dependencies using sudo to run as csye6225
 cd /opt/csye6225
 sudo -u csye6225 npm ci --only=production
 
