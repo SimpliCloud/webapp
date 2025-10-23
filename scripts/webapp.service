@@ -1,14 +1,15 @@
 [Unit]
 Description=CSYE6225 Web Application
-After=network.target mysql.service
-Wants=mysql.service
+After=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=csye6225
 Group=csye6225
-WorkingDirectory=/opt/csye6225
-ExecStart=/usr/bin/node /opt/csye6225/server.js
+WorkingDirectory=/opt/csye6225/webapp
+EnvironmentFile=/opt/csye6225/webapp/.env
+ExecStart=/usr/bin/node /opt/csye6225/webapp/server.js
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/csye6225/logs/webapp.log
@@ -20,15 +21,6 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/csye6225
-
-# Environment variables matching your MySQL setup
-Environment="NODE_ENV=production"
-Environment="PORT=8080"
-Environment="DB_HOST=localhost"
-Environment="DB_PORT=3306"
-Environment="DB_NAME=health_check_db"
-Environment="DB_USER=csye6225"
-Environment="DB_PASS=MyPassword@123"
 
 [Install]
 WantedBy=multi-user.target

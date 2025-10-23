@@ -11,7 +11,6 @@
     "test:unit": "jest tests/*.test.js --runInBand --forceExit",
     "test:integration": "jest tests/integration/*.test.js --runInBand --forceExit",
     "test:all": "jest --runInBand --forceExit --detectOpenHandles"
-    
   },
   "keywords": [
     "express",
@@ -24,12 +23,15 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.914.0",
+    "@aws-sdk/client-ssm": "^3.914.0",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "express-validator": "^7.2.1",
     "helmet": "^7.2.0",
+    "multer": "^1.4.5-lts.1",
     "mysql2": "^3.15.1",
     "sequelize": "^6.37.7",
     "uuid": "^9.0.1"

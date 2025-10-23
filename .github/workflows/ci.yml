@@ -31,7 +31,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
 
     - name: Install dependencies
@@ -60,6 +60,9 @@ jobs:
         echo "DB_USER=$DB_USER" >> .env
         echo "DB_PASS=$DB_PASS" >> .env
         echo "PORT=8080" >> .env
+        echo "AWS_REGION=us-east-1" >> .env
+        echo "S3_BUCKET_NAME=test-bucket-${{ github.run_id }}" >> .env
+        echo "BCRYPT_SALT_ROUNDS=10" >> .env
 
     - name: Setup database schema
       env:
@@ -69,12 +72,15 @@ jobs:
         DB_NAME: ${{ secrets.DB_NAME }}
         DB_USER: ${{ secrets.DB_USER }}
         DB_PASS: ${{ secrets.DB_ROOT_PASSWORD }}
+        AWS_REGION: us-east-1
+        S3_BUCKET_NAME: test-bucket-${{ github.run_id }}
       run: |
         node -e "
-        const { sequelize } = require('./models');
+        const { sequelize } = require('./config/database');
+        const models = require('./models');
         sequelize.sync({ force: true })
           .then(() => {
-            console.log('✓ Database schema created successfully');
+            console.log('✔ Database schema created successfully');
             process.exit(0);
           })
           .catch(err => {
@@ -91,6 +97,8 @@ jobs:
         DB_NAME: ${{ secrets.DB_NAME }}
         DB_USER: ${{ secrets.DB_USER }}
         DB_PASS: ${{ secrets.DB_ROOT_PASSWORD }}
+        AWS_REGION: us-east-1
+        S3_BUCKET_NAME: test-bucket-${{ github.run_id }}
       run: npm run test:unit
 
     - name: Run integration tests
@@ -101,6 +109,8 @@ jobs:
         DB_NAME: ${{ secrets.DB_NAME }}
         DB_USER: ${{ secrets.DB_USER }}
         DB_PASS: ${{ secrets.DB_ROOT_PASSWORD }}
+        AWS_REGION: us-east-1
+        S3_BUCKET_NAME: test-bucket-${{ github.run_id }}
       run: npm run test:integration
 
     - name: Upload coverage reports
