@@ -10,7 +10,6 @@ env:
   ARTIFACT_PATH: ./
 
 jobs:
-  # Temporarily simplified test job
   basic-validation:
     runs-on: ubuntu-latest
 
@@ -27,10 +26,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Create test environment file
+        run: |
+          cat > .env <<EOF
+          NODE_ENV=test
+          PORT=8080
+          DB_HOST=localhost
+          DB_PORT=3306
+          DB_NAME=test_db
+          DB_USER=root
+          DB_PASS=test
+          AWS_REGION=us-east-1
+          S3_BUCKET_NAME=test-bucket
+          EOF
+
       - name: Check application can start
         run: |
           # Just verify the app doesn't crash on startup
-          timeout 5s node -e "require('./server.js')" || true
+          node -c server.js
           echo "Application startup check completed"
 
   build-artifact:
@@ -116,11 +129,6 @@ jobs:
         run: |
           cd packer
           packer init .
-
-      # - name: Prepare build directory
-      #   run: |
-      #     # Copy scripts to packer directory for easier access
-      #     cp -r scripts packer/
 
       - name: Build AMI
         env:

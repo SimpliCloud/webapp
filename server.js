@@ -10,6 +10,7 @@ const { testConnection, initializeDatabase } = require('./config/database');
 const healthRoutes = require('./routes/health');
 const userRoutes = require('./routes/users');
 const productRoutes = require('./routes/products');
+const imageRoutes = require('./routes/images');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -45,7 +46,8 @@ if (process.env.NODE_ENV === 'development') {
 // Mount routes
 app.use('/', healthRoutes);  // Health check endpoint
 app.use('/', userRoutes);    // User management endpoints
-app.use('/', productRoutes); // Product management endpoints
+app.use('/', productRoutes);
+app.use('/', imageRoutes);  // Product management endpoints
 
 // 404 handler for undefined routes
 app.use('*', (req, res) => {

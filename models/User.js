@@ -121,20 +121,34 @@ User.prototype.toJSON = function() {
   return values;
 };
 
-// Class method to authenticate user
+// Static method for authentication
 User.authenticate = async function(email, password) {
   try {
-    const user = await User.findOne({ where: { email } });
+    // Find user by email
+    const user = await this.findOne({
+      where: { email: email }
+    });
+    
     if (!user) {
       return null;
     }
     
-    const isValid = await user.validatePassword(password);
-    if (!isValid) {
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    
+    if (!isValidPassword) {
       return null;
     }
     
-    return user;
+    // Return user data without password
+    return {
+      id: user.id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      account_created: user.account_created,
+      account_updated: user.account_updated
+    };
   } catch (error) {
     console.error('Authentication error:', error);
     return null;

@@ -104,11 +104,6 @@ build {
     ]
   }
 
-  # Install MySQL
-  provisioner "shell" {
-    script = "../scripts/install-mysql.sh"
-  }
-
   # Install Node.js
   provisioner "shell" {
     script = "../scripts/install-nodejs.sh"
@@ -132,7 +127,7 @@ build {
     destination = "/tmp/"
   }
 
-  # Setup application
+  # Setup application (modified to not include database setup)
   provisioner "shell" {
     script = "../scripts/setup-application.sh"
   }
@@ -151,7 +146,7 @@ build {
     ]
   }
 
-  # Final cleanup...
+  # Final cleanup
   provisioner "shell" {
     inline = [
       "sudo apt-get autoremove -y",
