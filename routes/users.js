@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const { authenticate } = require('../middleware/auth');
+const logger = require('../config/logger');
 const {
   validateUserCreate,
   validateUserUpdate,
@@ -24,9 +25,18 @@ router.post('/v1/user',
     try {
       const { email, password, first_name, last_name } = req.body;
       
+      logger.info('User creation request received', {
+        email,
+        first_name,
+        last_name
+      });
+      
       // Check if user already exists
       const existingUser = await User.findOne({ where: { email } });
       if (existingUser) {
+        logger.warn('User creation failed - email already exists', {
+          email
+        });
         return res.status(400).json({ error: 'User with this email already exists' });
       }
       
@@ -38,11 +48,20 @@ router.post('/v1/user',
         last_name
       });
       
+      logger.info('User created successfully', {
+        userId: user.id,
+        email: user.email
+      });
+      
       // Return user data (password excluded by toJSON method)
       res.status(201).json(user);
       
     } catch (error) {
-      console.error('User creation error:', error);
+      logger.error('User creation error', {
+        error: error.message,
+        stack: error.stack,
+        email: req.body?.email
+      });
       
       // Handle Sequelize validation errors
       if (error.name === 'SequelizeValidationError') {
@@ -67,14 +86,26 @@ router.get('/v1/user/:userId',
     try {
       const { userId } = req.params;
       
+      logger.info('Get user request received', {
+        requestedUserId: userId,
+        authenticatedUserId: req.user.id
+      });
+      
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(userId)) {
+        logger.warn('Get user failed - invalid UUID format', {
+          userId
+        });
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
       
       // Check if user is requesting their own information
       if (userId !== req.user.id) {
+        logger.warn('Get user failed - unauthorized access attempt', {
+          requestedUserId: userId,
+          authenticatedUserId: req.user.id
+        });
         return res.status(403).json({ error: 'You can only access your own user information' });
       }
       
@@ -82,12 +113,23 @@ router.get('/v1/user/:userId',
       const user = await User.findByPk(userId);
       
       if (!user) {
+        logger.warn('Get user failed - user not found', {
+          userId
+        });
         return res.status(404).json({ error: 'User not found' });
       }
       
+      logger.info('User retrieved successfully', {
+        userId: user.id
+      });
+      
       res.status(200).json(user);
     } catch (error) {
-      console.error('Get user error:', error);
+      logger.error('Get user error', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.params.userId
+      });
       res.status(500).json({ error: 'Failed to retrieve user information' });
     }
 });
@@ -103,19 +145,36 @@ router.put('/v1/user/:userId',
       const { userId } = req.params;
       const { password, first_name, last_name } = req.body;
       
+      logger.info('User update (PUT) request received', {
+        userId,
+        authenticatedUserId: req.user.id,
+        fieldsToUpdate: Object.keys(req.body)
+      });
+      
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(userId)) {
+        logger.warn('User update failed - invalid UUID format', {
+          userId
+        });
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
       
       // Check if user is updating their own information
       if (userId !== req.user.id) {
+        logger.warn('User update failed - unauthorized access attempt', {
+          requestedUserId: userId,
+          authenticatedUserId: req.user.id
+        });
         return res.status(403).json({ error: 'You can only update your own user information' });
       }
       
       // Check that all required fields are provided for PUT
       if (!password || !first_name || !last_name) {
+        logger.warn('User update failed - missing required fields for PUT', {
+          userId,
+          providedFields: Object.keys(req.body)
+        });
         return res.status(400).json({ 
           error: 'PUT requires all updatable fields: password, first_name, last_name' 
         });
@@ -125,6 +184,9 @@ router.put('/v1/user/:userId',
       const user = await User.findByPk(userId);
       
       if (!user) {
+        logger.warn('User update failed - user not found', {
+          userId
+        });
         return res.status(404).json({ error: 'User not found' });
       }
       
@@ -138,13 +200,18 @@ router.put('/v1/user/:userId',
       // Update user
       await user.update(updates);
       
-      // Reload to get updated data
-      await user.reload();
+      logger.info('User updated successfully (PUT)', {
+        userId: user.id
+      });
       
       res.status(204).send(); // No content response for successful update
       
     } catch (error) {
-      console.error('User update error:', error);
+      logger.error('User update error', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.params.userId
+      });
       
       if (error.name === 'SequelizeValidationError') {
         const messages = error.errors.map(e => e.message);
@@ -166,14 +233,27 @@ router.patch('/v1/user/:userId',
       const { userId } = req.params;
       const { password, first_name, last_name } = req.body;
       
+      logger.info('User update (PATCH) request received', {
+        userId,
+        authenticatedUserId: req.user.id,
+        fieldsToUpdate: Object.keys(req.body)
+      });
+      
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(userId)) {
+        logger.warn('User update failed - invalid UUID format', {
+          userId
+        });
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
       
       // Check if user is updating their own information
       if (userId !== req.user.id) {
+        logger.warn('User update failed - unauthorized access attempt', {
+          requestedUserId: userId,
+          authenticatedUserId: req.user.id
+        });
         return res.status(403).json({ error: 'You can only update your own user information' });
       }
       
@@ -181,6 +261,9 @@ router.patch('/v1/user/:userId',
       const user = await User.findByPk(userId);
       
       if (!user) {
+        logger.warn('User update failed - user not found', {
+          userId
+        });
         return res.status(404).json({ error: 'User not found' });
       }
       
@@ -192,19 +275,28 @@ router.patch('/v1/user/:userId',
       
       // Check if any valid fields were provided
       if (Object.keys(updates).length === 0) {
+        logger.warn('User update failed - no valid fields to update', {
+          userId
+        });
         return res.status(400).json({ error: 'No valid fields to update' });
       }
       
       // Update user
       await user.update(updates);
       
-      // Reload to get updated data
-      await user.reload();
+      logger.info('User updated successfully (PATCH)', {
+        userId: user.id,
+        updatedFields: Object.keys(updates)
+      });
       
       res.status(204).send(); // No content response for successful update
       
     } catch (error) {
-      console.error('User update error:', error);
+      logger.error('User update error', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.params.userId
+      });
       
       if (error.name === 'SequelizeValidationError') {
         const messages = error.errors.map(e => e.message);
@@ -217,11 +309,20 @@ router.patch('/v1/user/:userId',
 
 // Handle unsupported methods for user endpoints
 router.all('/v1/user', (req, res) => {
+  logger.warn('Method not allowed on /v1/user', {
+    method: req.method,
+    ip: req.ip
+  });
   res.status(405).json({ error: 'Method not allowed' });
 });
 
 router.all('/v1/user/:userId', (req, res) => {
   if (!['GET', 'PUT', 'PATCH'].includes(req.method)) {
+    logger.warn('Method not allowed on /v1/user/:userId', {
+      method: req.method,
+      userId: req.params.userId,
+      ip: req.ip
+    });
     res.status(405).json({ error: 'Method not allowed' });
   }
 });

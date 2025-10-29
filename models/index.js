@@ -3,6 +3,7 @@ const Product = require('./Product');
 const Image = require('./Image');
 const HealthCheck = require('./HealthCheck');
 const { sequelize } = require('../config/database');
+const { addModelHooks } = require('../config/modelHooks');
 
 // Define associations
 User.hasMany(Product, {
@@ -38,6 +39,11 @@ User.hasMany(Image, {
   foreignKey: 'owner_user_id',
   as: 'uploadedImages'
 });
+
+addModelHooks(User, 'User');
+addModelHooks(Product, 'Product');
+addModelHooks(Image, 'Image');
+addModelHooks(HealthCheck, 'HealthCheck');
 
 // Export all models
 module.exports = {

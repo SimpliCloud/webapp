@@ -1,0 +1,109 @@
+{
+  "agent": {
+    "metrics_collection_interval": 10,
+    "run_as_user": "root",
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/opt/csye6225/logs/webapp.log",
+            "log_group_name": "csye6225",
+            "log_stream_name": "webapp",
+            "retention_in_days": 7,
+            "timezone": "UTC",
+            "timestamp_format": "%Y-%m-%d %H:%M:%S"
+          },
+          {
+            "file_path": "/opt/csye6225/logs/webapp-error.log",
+            "log_group_name": "csye6225",
+            "log_stream_name": "webapp-error",
+            "retention_in_days": 7,
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/opt/csye6225/logs/exceptions.log",
+            "log_group_name": "csye6225",
+            "log_stream_name": "webapp-exceptions",
+            "retention_in_days": 30,
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/opt/csye6225/logs/rejections.log",
+            "log_group_name": "csye6225",
+            "log_stream_name": "webapp-rejections",
+            "retention_in_days": 30,
+            "timezone": "UTC"
+          }
+        ]
+      }
+    },
+    "log_stream_name": "{instance_id}-{ip_address}"
+  },
+  "metrics": {
+    "namespace": "CSYE6225",
+    "metrics_collected": {
+      "statsd": {
+        "service_address": ":8125",
+        "metrics_collection_interval": 15,
+        "metrics_aggregation_interval": 300
+      },
+      "cpu": {
+        "measurement": [
+          {
+            "name": "cpu_usage_idle",
+            "rename": "CPU_IDLE",
+            "unit": "Percent"
+          },
+          {
+            "name": "cpu_usage_iowait",
+            "rename": "CPU_IOWAIT",
+            "unit": "Percent"
+          }
+        ],
+        "metrics_collection_interval": 60,
+        "totalcpu": false
+      },
+      "disk": {
+        "measurement": [
+          {
+            "name": "used_percent",
+            "rename": "DISK_USED",
+            "unit": "Percent"
+          }
+        ],
+        "metrics_collection_interval": 60,
+        "resources": [
+          "*"
+        ]
+      },
+      "mem": {
+        "measurement": [
+          {
+            "name": "mem_used_percent",
+            "rename": "MEM_USED",
+            "unit": "Percent"
+          }
+        ],
+        "metrics_collection_interval": 60
+      },
+      "netstat": {
+        "measurement": [
+          {
+            "name": "tcp_established",
+            "rename": "TCP_ESTABLISHED",
+            "unit": "Count"
+          },
+          {
+            "name": "tcp_time_wait",
+            "rename": "TCP_TIME_WAIT",
+            "unit": "Count"
+          }
+        ],
+        "metrics_collection_interval": 60
+      }
+    }
+  }
+}
