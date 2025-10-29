@@ -3,6 +3,11 @@ const helmet = require('helmet');
 const cors = require('cors');
 require('dotenv').config();
 
+// Import logger and metrics (NEW)
+const logger = require('./config/logger');
+const { metrics } = require('./config/metrics');
+const requestLogger = require('./middleware/requestLogger');
+
 // Import database configuration
 const { testConnection, initializeDatabase } = require('./config/database');
 
@@ -15,17 +20,19 @@ const imageRoutes = require('./routes/images');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-console.log('Starting application');
-console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-console.log(`Port: ${PORT}`);
+logger.info('Starting application', {
+  environment: process.env.NODE_ENV || 'development',
+  port: PORT,
+  nodeVersion: process.version
+});
 
-// Security middleware - adds security headers to all responses
+// Security middleware
 app.use(helmet());
 
-// CORS configuration for API access
+// CORS configuration
 app.use(cors({
-  origin: false, // No frontend, but keeping for API clients
-  credentials: true // Allow credentials for Basic Auth
+  origin: false,
+  credentials: true
 }));
 
 // JSON parsing middleware
@@ -35,23 +42,23 @@ app.use(express.urlencoded({ extended: true }));
 // Disable Express server identification
 app.disable('x-powered-by');
 
-// Request logging middleware (only in development)
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-    next();
-  });
-}
+// Request logging and metrics middleware (NEW)
+app.use(requestLogger);
 
 // Mount routes
-app.use('/', healthRoutes);  // Health check endpoint
-app.use('/', userRoutes);    // User management endpoints
+app.use('/', healthRoutes);
+app.use('/', userRoutes);
 app.use('/', productRoutes);
-app.use('/', imageRoutes);  // Product management endpoints
+app.use('/', imageRoutes);
 
-// 404 handler for undefined routes
+// 404 handler
 app.use('*', (req, res) => {
-  console.log(`✗ 404 Not Found: ${req.method} ${req.originalUrl}`);
+  logger.warn('404 Not Found', {
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip
+  });
+  
   res.status(404)
     .set('Cache-Control', 'no-cache, no-store, must-revalidate')
     .set('Pragma', 'no-cache')
@@ -59,11 +66,15 @@ app.use('*', (req, res) => {
     .json({ error: 'Endpoint not found' });
 });
 
-// Global error handler - prevents 500 errors from crashing the application
+// Global error handler (ENHANCED)
 app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
+  logger.error('Unhandled error', {
+    error: error.message,
+    stack: error.stack,
+    path: req.path,
+    method: req.method
+  });
   
-  // Don't expose error details in production
   const message = process.env.NODE_ENV === 'development' 
     ? error.message 
     : 'Internal Server Error';
@@ -75,79 +86,71 @@ app.use((error, req, res, next) => {
     .json({ error: message });
 });
 
-// Graceful shutdown handler - ensures clean shutdown for SIGTERM/SIGINT
+// Graceful shutdown
 const gracefulShutdown = (server) => {
-  process.on('SIGTERM', () => {
-    console.log('\nReceived SIGTERM, shutting down gracefully...');
+  const shutdown = (signal) => {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+    
     server.close(() => {
-      console.log('✓ Server closed');
-      process.exit(0);
+      logger.info('HTTP server closed');
+      
+      // Close metrics client
+      metrics.close(() => {
+        logger.info('Metrics client closed');
+        process.exit(0);
+      });
     });
-  });
 
-  process.on('SIGINT', () => {
-    console.log('\nReceived SIGINT, shutting down gracefully...');
-    server.close(() => {
-      console.log('✓ Server closed');
-      process.exit(0);
-    });
-  });
+    // Force shutdown after 30 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown due to timeout');
+      process.exit(1);
+    }, 30000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
-// Main application initialization function
+// Main application initialization
 const startServer = async () => {
   try {
-    console.log('Testing database connection...');
+    logger.info('Testing database connection...');
     
-    // Test database connection first - fails fast if database unavailable
     const dbConnected = await testConnection();
     if (!dbConnected) {
-      console.error('Failed to connect to database. Exiting...');
+      logger.error('Failed to connect to database');
       process.exit(1);
     }
     
-    console.log('Initializing database schema...');
+    logger.info('Initializing database schema...');
     
-    // Initialize database schema automatically - no manual SQL scripts needed
     const dbInitialized = await initializeDatabase();
     if (!dbInitialized) {
-      console.error('Failed to initialize database. Exiting...');
+      logger.error('Failed to initialize database');
       process.exit(1);
     }
     
-    // Start the HTTP server only after database is ready
     const server = app.listen(PORT, () => {
-      console.log('\n✓ Cloud-Native Web Application is running!');
-      console.log(`📍 Server URL: http://localhost:${PORT}`);
-      console.log('\nAvailable endpoints:');
-      console.log('  Health Check:');
-      console.log('    GET /healthz');
-      console.log('  User Management:');
-      console.log('    POST   /v1/user        - Create user');
-      console.log('    GET    /v1/user/self   - Get user info (auth required)');
-      console.log('    PUT    /v1/user/self   - Update user (auth required)');
-      console.log('    PATCH  /v1/user/self   - Partial update (auth required)');
-      console.log('  Product Management:');
-      console.log('    POST   /v1/product     - Create product (auth required)');
-      console.log('    GET    /v1/product/:id - Get product');
-      console.log('    PUT    /v1/product/:id - Update product (auth required)');
-      console.log('    PATCH  /v1/product/:id - Partial update (auth required)');
-      console.log('    DELETE /v1/product/:id - Delete product (auth required)');
-      console.log('\n✓ Ready to accept requests\n');
+      logger.info('Application started successfully', {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development'
+      });
     });
     
-    // Set up graceful shutdown
     gracefulShutdown(server);
     
     return server;
     
   } catch (error) {
-    console.error('Failed to start server:', error.message);
+    logger.error('Failed to start server', {
+      error: error.message,
+      stack: error.stack
+    });
     process.exit(1);
   }
 };
 
-// Start the server if this file is run directly
 if (require.main === module) {
   startServer();
 }

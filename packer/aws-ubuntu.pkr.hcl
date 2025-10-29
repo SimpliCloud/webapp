@@ -109,6 +109,13 @@ build {
     script = "../scripts/install-nodejs.sh"
   }
 
+  # ============================================
+  # NEW: Install CloudWatch Unified Agent
+  # ============================================
+  provisioner "shell" {
+    script = "../scripts/install-cloudwatch-agent.sh"
+  }
+
   # Create user and setup application directory
   provisioner "shell" {
     script = "../scripts/setup-user.sh"
@@ -127,9 +134,27 @@ build {
     destination = "/tmp/"
   }
 
-  # Setup application (modified to not include database setup)
+  # Setup application
   provisioner "shell" {
     script = "../scripts/setup-application.sh"
+  }
+
+  # ============================================
+  # NEW: Copy CloudWatch configuration to AMI
+  # ============================================
+  provisioner "file" {
+    source      = "../scripts/cloudwatch-config.json"
+    destination = "/tmp/cloudwatch-config.json"
+  }
+
+  provisioner "shell" {
+    inline = [
+      "sudo mkdir -p /opt/cloudwatch",
+      "sudo mv /tmp/cloudwatch-config.json /opt/cloudwatch/cloudwatch-config.json",
+      "sudo chown root:root /opt/cloudwatch/cloudwatch-config.json",
+      "sudo chmod 644 /opt/cloudwatch/cloudwatch-config.json",
+      "echo '✓ CloudWatch configuration copied to /opt/cloudwatch/cloudwatch-config.json'"
+    ]
   }
 
   # Configure systemd service
@@ -142,7 +167,30 @@ build {
     inline = [
       "sudo mv /tmp/webapp.service /etc/systemd/system/webapp.service",
       "sudo systemctl daemon-reload",
-      "sudo systemctl enable webapp.service"
+      "sudo systemctl enable webapp.service",
+      "echo '✓ Web application service enabled'"
+    ]
+  }
+
+  # ============================================
+  # NEW: Verify CloudWatch agent installation
+  # ============================================
+  provisioner "shell" {
+    inline = [
+      "echo 'Verifying CloudWatch agent installation...'",
+      "if [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then",
+      "  echo '✓ CloudWatch agent binary found'",
+      "  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -version",
+      "else",
+      "  echo '✗ CloudWatch agent binary not found'",
+      "  exit 1",
+      "fi",
+      "if [ -f /opt/cloudwatch/cloudwatch-config.json ]; then",
+      "  echo '✓ CloudWatch configuration file found'",
+      "else",
+      "  echo '✗ CloudWatch configuration file not found'",
+      "  exit 1",
+      "fi"
     ]
   }
 
@@ -151,7 +199,8 @@ build {
     inline = [
       "sudo apt-get autoremove -y",
       "sudo apt-get clean",
-      "sudo rm -rf /tmp/*"
+      "sudo rm -rf /tmp/*",
+      "echo 'AMI build completed successfully!'"
     ]
   }
 }

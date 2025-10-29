@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const { authenticate } = require('../middleware/auth');
+const logger = require('../config/logger');
 const {
   validateProductCreate,
   validateProductUpdate,
@@ -23,9 +24,19 @@ router.post('/v1/product',
     try {
       const { name, description, sku, manufacturer, quantity } = req.body;
 
+      logger.info('Product creation request received', {
+        userId: req.user.id,
+        sku,
+        name
+      });
+
       // Check if SKU already exists
       const existingProduct = await Product.findOne({ where: { sku } });
       if (existingProduct) {
+        logger.warn('Product creation failed - SKU already exists', {
+          userId: req.user.id,
+          sku
+        });
         return res.status(400).json({ error: 'Product with this SKU already exists' });
       }
 
@@ -39,10 +50,21 @@ router.post('/v1/product',
         owner_user_id: req.user.id
       });
 
+      logger.info('Product created successfully', {
+        productId: product.id,
+        userId: req.user.id,
+        sku: product.sku
+      });
+
       res.status(201).json(product);
 
     } catch (error) {
-      console.error('Product creation error:', error);
+      logger.error('Product creation error', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        sku: req.body?.sku
+      });
 
       if (error.name === 'SequelizeValidationError') {
         const messages = error.errors.map(e => e.message);
@@ -64,22 +86,40 @@ router.get('/v1/product/:productId',
     try {
       const { productId } = req.params;
 
+      logger.info('Get product request received', {
+        productId
+      });
+
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(productId)) {
+        logger.warn('Get product failed - invalid UUID format', {
+          productId
+        });
         return res.status(400).json({ error: 'Invalid product ID format' });
       }
 
       const product = await Product.findByPk(productId);
 
       if (!product) {
+        logger.warn('Get product failed - product not found', {
+          productId
+        });
         return res.status(404).json({ error: 'Product not found' });
       }
+
+      logger.info('Product retrieved successfully', {
+        productId: product.id
+      });
 
       res.status(200).json(product);
 
     } catch (error) {
-      console.error('Get product error:', error);
+      logger.error('Get product error', {
+        error: error.message,
+        stack: error.stack,
+        productId: req.params.productId
+      });
       res.status(500).json({ error: 'Failed to retrieve product' });
     }
   });
@@ -95,14 +135,27 @@ router.put('/v1/product/:productId',
       const { productId } = req.params;
       const { name, description, sku, manufacturer, quantity } = req.body;
 
+      logger.info('Product update (PUT) request received', {
+        productId,
+        userId: req.user.id,
+        fieldsToUpdate: Object.keys(req.body)
+      });
+
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(productId)) {
+        logger.warn('Product update failed - invalid UUID format', {
+          productId
+        });
         return res.status(400).json({ error: 'Invalid product ID format' });
       }
 
       // Check that all required fields are provided for PUT
       if (!name || !description || !sku || !manufacturer || quantity === undefined) {
+        logger.warn('Product update failed - missing required fields for PUT', {
+          productId,
+          providedFields: Object.keys(req.body)
+        });
         return res.status(400).json({
           error: 'PUT requires all fields: name, description, sku, manufacturer, quantity'
         });
@@ -111,11 +164,19 @@ router.put('/v1/product/:productId',
       const product = await Product.findByPk(productId);
 
       if (!product) {
+        logger.warn('Product update failed - product not found', {
+          productId
+        });
         return res.status(404).json({ error: 'Product not found' });
       }
 
       // Check ownership
       if (product.owner_user_id !== req.user.id) {
+        logger.warn('Product update failed - unauthorized access attempt', {
+          productId,
+          ownerId: product.owner_user_id,
+          requestUserId: req.user.id
+        });
         return res.status(403).json({ error: 'You do not have permission to update this product' });
       }
 
@@ -123,6 +184,10 @@ router.put('/v1/product/:productId',
       if (sku !== product.sku) {
         const existingProduct = await Product.findOne({ where: { sku } });
         if (existingProduct) {
+          logger.warn('Product update failed - SKU already exists', {
+            productId,
+            sku
+          });
           return res.status(400).json({ error: 'Product with this SKU already exists' });
         }
       }
@@ -136,10 +201,20 @@ router.put('/v1/product/:productId',
         quantity
       });
 
+      logger.info('Product updated successfully (PUT)', {
+        productId: product.id,
+        userId: req.user.id
+      });
+
       res.status(204).send();
 
     } catch (error) {
-      console.error('Product update error:', error);
+      logger.error('Product update error', {
+        error: error.message,
+        stack: error.stack,
+        productId: req.params.productId,
+        userId: req.user?.id
+      });
 
       if (error.name === 'SequelizeValidationError') {
         const messages = error.errors.map(e => e.message);
@@ -166,20 +241,37 @@ router.patch('/v1/product/:productId',
       const updates = {};
       const { name, description, sku, manufacturer, quantity } = req.body;
 
+      logger.info('Product update (PATCH) request received', {
+        productId,
+        userId: req.user.id,
+        fieldsToUpdate: Object.keys(req.body)
+      });
+
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(productId)) {
+        logger.warn('Product update failed - invalid UUID format', {
+          productId
+        });
         return res.status(400).json({ error: 'Invalid product ID format' });
       }
 
       const product = await Product.findByPk(productId);
 
       if (!product) {
+        logger.warn('Product update failed - product not found', {
+          productId
+        });
         return res.status(404).json({ error: 'Product not found' });
       }
 
       // Check ownership
       if (product.owner_user_id !== req.user.id) {
+        logger.warn('Product update failed - unauthorized access attempt', {
+          productId,
+          ownerId: product.owner_user_id,
+          requestUserId: req.user.id
+        });
         return res.status(403).json({ error: 'You do not have permission to update this product' });
       }
 
@@ -192,6 +284,9 @@ router.patch('/v1/product/:productId',
 
       // Check if any valid fields were provided
       if (Object.keys(updates).length === 0) {
+        logger.warn('Product update failed - no valid fields to update', {
+          productId
+        });
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
@@ -199,6 +294,10 @@ router.patch('/v1/product/:productId',
       if (sku && sku !== product.sku) {
         const existingProduct = await Product.findOne({ where: { sku } });
         if (existingProduct) {
+          logger.warn('Product update failed - SKU already exists', {
+            productId,
+            sku
+          });
           return res.status(400).json({ error: 'Product with this SKU already exists' });
         }
       }
@@ -206,10 +305,21 @@ router.patch('/v1/product/:productId',
       // Update product
       await product.update(updates);
 
+      logger.info('Product updated successfully (PATCH)', {
+        productId: product.id,
+        userId: req.user.id,
+        updatedFields: Object.keys(updates)
+      });
+
       res.status(204).send();
 
     } catch (error) {
-      console.error('Product update error:', error);
+      logger.error('Product update error', {
+        error: error.message,
+        stack: error.stack,
+        productId: req.params.productId,
+        userId: req.user?.id
+      });
 
       if (error.name === 'SequelizeValidationError') {
         const messages = error.errors.map(e => e.message);
@@ -231,46 +341,84 @@ router.delete('/v1/product/:productId',
     try {
       const { productId } = req.params;
 
+      logger.info('Product delete request received', {
+        productId,
+        userId: req.user.id
+      });
+
       // Check for request body INSIDE the handler
       if (req.body && Object.keys(req.body).length > 0) {
+        logger.warn('Product delete failed - request body not allowed', {
+          productId
+        });
         return res.status(400).json({ error: 'Request body not allowed' });
       }
 
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(productId)) {
+        logger.warn('Product delete failed - invalid UUID format', {
+          productId
+        });
         return res.status(400).json({ error: 'Invalid product ID format' });
       }
 
       // Find product
       const product = await Product.findByPk(productId);
       if (!product) {
+        logger.warn('Product delete failed - product not found', {
+          productId
+        });
         return res.status(404).json({ error: 'Product not found' });
       }
 
       // Check ownership
       if (product.owner_user_id !== req.user.id) {
+        logger.warn('Product delete failed - unauthorized access attempt', {
+          productId,
+          ownerId: product.owner_user_id,
+          requestUserId: req.user.id
+        });
         return res.status(403).json({ error: 'You do not have permission to delete this product' });
       }
 
       // Delete product
       await product.destroy();
 
+      logger.info('Product deleted successfully', {
+        productId,
+        userId: req.user.id
+      });
+
       res.status(204).send();
 
     } catch (error) {
-      console.error('Product deletion error:', error);
+      logger.error('Product deletion error', {
+        error: error.message,
+        stack: error.stack,
+        productId: req.params.productId,
+        userId: req.user?.id
+      });
       res.status(500).json({ error: 'Failed to delete product' });
     }
   });
 
 // Handle unsupported methods
 router.all('/v1/product', (req, res) => {
+  logger.warn('Method not allowed on /v1/product', {
+    method: req.method,
+    ip: req.ip
+  });
   res.status(405).json({ error: 'Method not allowed' });
 });
 
 router.all('/v1/product/:productId', (req, res) => {
   if (!['GET', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    logger.warn('Method not allowed on /v1/product/:productId', {
+      method: req.method,
+      productId: req.params.productId,
+      ip: req.ip
+    });
     res.status(405).json({ error: 'Method not allowed' });
   }
 });

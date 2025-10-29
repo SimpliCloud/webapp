@@ -1,23 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { authenticate } = require('../middleware/auth');
 const { Product, Image } = require('../models');
+const logger = require('../config/logger');
 
-// Configure AWS S3
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
-  // Credentials will be automatically loaded from IAM role
-});
+// UPDATED: Use the S3 wrapper instead of direct client
+const { putObject, getObject, deleteObject } = require('../config/s3Client');
 
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  // Accepted file extensions
   const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'];
   const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/tiff', 'image/webp'];
   
@@ -39,11 +35,10 @@ const upload = multer({
   }
 });
 
-// Helper function to generate S3 key with user partitioning
+// Helper function to generate S3 key
 const generateS3Key = (userId, productId, fileName) => {
   const ext = path.extname(fileName);
   const imageId = uuidv4();
-  // Partition by user ID, then product ID
   return `users/${userId}/products/${productId}/${imageId}${ext}`;
 };
 
@@ -53,8 +48,17 @@ router.post('/v1/product/:product_id/image', authenticate, upload.single('image'
     const { product_id } = req.params;
     const userId = req.user.id;
     
-    // Check if image was uploaded
+    logger.info('Image upload request received', {
+      productId: product_id,
+      userId: userId,
+      fileName: req.file?.originalname
+    });
+    
     if (!req.file) {
+      logger.warn('Image upload failed - no file provided', {
+        productId: product_id,
+        userId: userId
+      });
       return res.status(400).json({
         error: 'No image file provided'
       });
@@ -69,15 +73,19 @@ router.post('/v1/product/:product_id/image', authenticate, upload.single('image'
     });
     
     if (!product) {
+      logger.warn('Image upload failed - product not found or unauthorized', {
+        productId: product_id,
+        userId: userId
+      });
       return res.status(403).json({
         error: 'Product not found or you do not have permission to add images to this product'
       });
     }
     
-    // Generate S3 key with user partitioning
+    // Generate S3 key
     const s3Key = generateS3Key(userId, product_id, req.file.originalname);
     
-    // Upload to S3
+    // UPDATED: Use wrapper function with automatic timing
     const uploadParams = {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: s3Key,
@@ -94,15 +102,19 @@ router.post('/v1/product/:product_id/image', authenticate, upload.single('image'
     
     let s3Response;
     try {
-      s3Response = await s3Client.send(new PutObjectCommand(uploadParams));
+      s3Response = await putObject(uploadParams);
     } catch (s3Error) {
-      console.error('S3 upload error:', s3Error);
+      logger.error('S3 upload error', {
+        productId: product_id,
+        userId: userId,
+        error: s3Error.message
+      });
       return res.status(500).json({
         error: 'Failed to upload image to storage'
       });
     }
     
-    // Save image metadata to database with S3 response metadata
+    // Save image metadata to database
     const image = await Image.create({
       product_id: product_id,
       file_name: req.file.originalname,
@@ -110,9 +122,9 @@ router.post('/v1/product/:product_id/image', authenticate, upload.single('image'
       file_size: req.file.size,
       content_type: req.file.mimetype,
       owner_user_id: userId,
-      etag: s3Response.ETag?.replace(/"/g, ''), // Remove quotes from ETag
+      etag: s3Response.ETag?.replace(/"/g, ''),
       version_id: s3Response.VersionId || null,
-      storage_class: 'STANDARD', // Will change to STANDARD_IA after 30 days per lifecycle policy
+      storage_class: 'STANDARD',
       server_side_encryption: s3Response.ServerSideEncryption || 'AES256',
       metadata: {
         original_filename: req.file.originalname,
@@ -122,7 +134,13 @@ router.post('/v1/product/:product_id/image', authenticate, upload.single('image'
       }
     });
     
-    // Return response
+    logger.info('Image uploaded successfully', {
+      imageId: image.image_id,
+      productId: product_id,
+      userId: userId,
+      s3Key: s3Key
+    });
+    
     res.status(201).json({
       image_id: image.image_id,
       product_id: image.product_id,
@@ -132,20 +150,28 @@ router.post('/v1/product/:product_id/image', authenticate, upload.single('image'
     });
     
   } catch (error) {
-    console.error('Error uploading image:', error);
+    logger.error('Error uploading image', {
+      error: error.message,
+      stack: error.stack,
+      productId: req.params.product_id
+    });
     res.status(500).json({
       error: 'Internal server error'
     });
   }
 });
 
-// GET /v1/product/:product_id/image - List all images for a product
+// GET /v1/product/:product_id/image - List all images
 router.get('/v1/product/:product_id/image', authenticate, async (req, res) => {
   try {
     const { product_id } = req.params;
     const userId = req.user.id;
     
-    // Verify product exists and user owns it
+    logger.info('List images request received', {
+      productId: product_id,
+      userId: userId
+    });
+    
     const product = await Product.findOne({
       where: {
         id: product_id,
@@ -154,12 +180,15 @@ router.get('/v1/product/:product_id/image', authenticate, async (req, res) => {
     });
     
     if (!product) {
+      logger.warn('List images failed - product not found or unauthorized', {
+        productId: product_id,
+        userId: userId
+      });
       return res.status(403).json({
         error: 'Product not found or you do not have permission to view images for this product'
       });
     }
     
-    // Get all images for the product
     const images = await Image.findAll({
       where: {
         product_id: product_id
@@ -168,23 +197,38 @@ router.get('/v1/product/:product_id/image', authenticate, async (req, res) => {
       order: [['date_created', 'DESC']]
     });
     
+    logger.info('Images listed successfully', {
+      productId: product_id,
+      userId: userId,
+      count: images.length
+    });
+    
     res.status(200).json(images);
     
   } catch (error) {
-    console.error('Error listing images:', error);
+    logger.error('Error listing images', {
+      error: error.message,
+      stack: error.stack,
+      productId: req.params.product_id
+    });
     res.status(500).json({
       error: 'Internal server error'
     });
   }
 });
 
-// GET /v1/product/:product_id/image/:image_id - Get specific image metadata
+// GET /v1/product/:product_id/image/:image_id - Get specific image
 router.get('/v1/product/:product_id/image/:image_id', authenticate, async (req, res) => {
   try {
     const { product_id, image_id } = req.params;
     const userId = req.user.id;
     
-    // Verify product exists and user owns it
+    logger.info('Get image request received', {
+      productId: product_id,
+      imageId: image_id,
+      userId: userId
+    });
+    
     const product = await Product.findOne({
       where: {
         id: product_id,
@@ -193,12 +237,15 @@ router.get('/v1/product/:product_id/image/:image_id', authenticate, async (req, 
     });
     
     if (!product) {
+      logger.warn('Get image failed - product not found or unauthorized', {
+        productId: product_id,
+        userId: userId
+      });
       return res.status(403).json({
         error: 'Product not found or you do not have permission to view this image'
       });
     }
     
-    // Get the specific image
     const image = await Image.findOne({
       where: {
         image_id: image_id,
@@ -208,16 +255,31 @@ router.get('/v1/product/:product_id/image/:image_id', authenticate, async (req, 
     });
     
     if (!image) {
+      logger.warn('Get image failed - image not found', {
+        productId: product_id,
+        imageId: image_id,
+        userId: userId
+      });
       return res.status(404).json({
         error: 'Image not found'
       });
     }
     
-    // Return as array to match API spec
+    logger.info('Image retrieved successfully', {
+      productId: product_id,
+      imageId: image_id,
+      userId: userId
+    });
+    
     res.status(200).json([image]);
     
   } catch (error) {
-    console.error('Error getting image:', error);
+    logger.error('Error getting image', {
+      error: error.message,
+      stack: error.stack,
+      productId: req.params.product_id,
+      imageId: req.params.image_id
+    });
     res.status(500).json({
       error: 'Internal server error'
     });
@@ -230,7 +292,12 @@ router.delete('/v1/product/:product_id/image/:image_id', authenticate, async (re
     const { product_id, image_id } = req.params;
     const userId = req.user.id;
     
-    // Verify product exists and user owns it
+    logger.info('Delete image request received', {
+      productId: product_id,
+      imageId: image_id,
+      userId: userId
+    });
+    
     const product = await Product.findOne({
       where: {
         id: product_id,
@@ -239,12 +306,15 @@ router.delete('/v1/product/:product_id/image/:image_id', authenticate, async (re
     });
     
     if (!product) {
+      logger.warn('Delete image failed - product not found or unauthorized', {
+        productId: product_id,
+        userId: userId
+      });
       return res.status(403).json({
         error: 'Product not found or you do not have permission to delete this image'
       });
     }
     
-    // Get the image to delete
     const image = await Image.findOne({
       where: {
         image_id: image_id,
@@ -254,32 +324,51 @@ router.delete('/v1/product/:product_id/image/:image_id', authenticate, async (re
     });
     
     if (!image) {
+      logger.warn('Delete image failed - image not found', {
+        productId: product_id,
+        imageId: image_id,
+        userId: userId
+      });
       return res.status(404).json({
         error: 'Image not found or you do not have permission to delete it'
       });
     }
     
-    // Delete from S3
+    // UPDATED: Use wrapper function with automatic timing
     const deleteParams = {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: image.s3_bucket_path
     };
     
     try {
-      await s3Client.send(new DeleteObjectCommand(deleteParams));
+      await deleteObject(deleteParams);
     } catch (s3Error) {
-      console.error('S3 delete error:', s3Error);
+      logger.error('S3 delete error', {
+        productId: product_id,
+        imageId: image_id,
+        error: s3Error.message
+      });
       // Continue with database deletion even if S3 fails
     }
     
-    // Delete from database (hard delete)
+    // Delete from database
     await image.destroy();
     
-    // Return 204 No Content
+    logger.info('Image deleted successfully', {
+      productId: product_id,
+      imageId: image_id,
+      userId: userId
+    });
+    
     res.status(204).send();
     
   } catch (error) {
-    console.error('Error deleting image:', error);
+    logger.error('Error deleting image', {
+      error: error.message,
+      stack: error.stack,
+      productId: req.params.product_id,
+      imageId: req.params.image_id
+    });
     res.status(500).json({
       error: 'Internal server error'
     });

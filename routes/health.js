@@ -1,5 +1,6 @@
 const express = require('express');
 const HealthCheck = require('../models/HealthCheck');
+const logger = require('../config/logger');
 const router = express.Router();
 
 // Health check endpoint: GET /healthz - core API functionality
@@ -11,6 +12,10 @@ router.get('/healthz', async (req, res) => {
     const hasContentLength = req.get('content-length') && parseInt(req.get('content-length')) > 0;
 
     if (req.method === 'HEAD') {
+      logger.warn('Health check - HEAD method not allowed', {
+        method: req.method,
+        ip: req.ip
+      });
       return res.status(405)
         .set('Cache-Control', 'no-cache, no-store, must-revalidate')
         .set('Pragma', 'no-cache')
@@ -21,7 +26,13 @@ router.get('/healthz', async (req, res) => {
     // Reject any request that contains query parameters, body, or content-length
     if (hasQueryParams || hasBody || hasContentLength) {
       const payloadType = hasQueryParams ? 'query parameters' : 'request body';
-      console.log(`✗ Health check request rejected: contains ${payloadType}`);
+      logger.warn('Health check request rejected - contains payload', {
+        payloadType,
+        hasQueryParams,
+        hasBody,
+        hasContentLength,
+        ip: req.ip
+      });
 
       // Return 400 Bad Request with required headers
       return res.status(400)
@@ -32,22 +43,30 @@ router.get('/healthz', async (req, res) => {
     }
 
     // Database connectivity test - attempt to insert record
+    logger.debug('Health check - testing database connection');
+    
     await HealthCheck.createHealthCheckRecord();
 
-    console.log('✓ Health check successful: database insert completed');
+    logger.info('Health check successful - database connection verified', {
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
 
     // Return 200 OK with required headers and no body
     res.status(200)
-      .set('Cache-Control', 'no-cache, no-store, must-revalidate')  // Prevent caching
-      .set('Pragma', 'no-cache')                                    // HTTP/1.0 cache control
-      .set('X-Content-Type-Options', 'nosniff')                     // Security header
+      .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      .set('Pragma', 'no-cache')
+      .set('X-Content-Type-Options', 'nosniff')
       .end(); // Empty response body as required
 
   } catch (error) {
-    console.error('✗ Health check failed:', error.message);
+    logger.error('Health check failed - database connection error', {
+      error: error.message,
+      stack: error.stack,
+      ip: req.ip
+    });
 
     // Return 503 Service Unavailable if database insert fails
-    // This indicates the service cannot handle requests due to database issues
     res.status(503)
       .set('Cache-Control', 'no-cache, no-store, must-revalidate')
       .set('Pragma', 'no-cache')
@@ -60,15 +79,23 @@ router.get('/healthz', async (req, res) => {
 router.all('/healthz', (req, res) => {
 
   if (req.method === 'HEAD') {
+    logger.warn('Health check - HEAD method not allowed', {
+      method: req.method,
+      ip: req.ip
+    });
     return res.status(405)
       .set('Cache-Control', 'no-cache, no-store, must-revalidate')
       .set('Pragma', 'no-cache')
       .set('X-Content-Type-Options', 'nosniff')
       .end();
   }
+
   // Only GET method is allowed - all others return 405
   if (req.method !== 'GET') {
-    console.log(`✗ Health check request rejected: method ${req.method} not allowed`);
+    logger.warn('Health check - method not allowed', {
+      method: req.method,
+      ip: req.ip
+    });
 
     // Return 405 Method Not Allowed for POST, PUT, DELETE, PATCH, etc.
     return res.status(405)
