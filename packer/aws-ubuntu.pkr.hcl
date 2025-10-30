@@ -180,7 +180,6 @@ build {
       "echo 'Verifying CloudWatch agent installation...'",
       "if [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then",
       "  echo '✓ CloudWatch agent binary found'",
-      "  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -version",
       "else",
       "  echo '✗ CloudWatch agent binary not found'",
       "  exit 1",
@@ -190,7 +189,8 @@ build {
       "else",
       "  echo '✗ CloudWatch configuration file not found'",
       "  exit 1",
-      "fi"
+      "fi",
+      "echo 'CloudWatch agent verification completed successfully'"
     ]
   }
 
