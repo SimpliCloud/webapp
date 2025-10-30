@@ -12,7 +12,6 @@
             "file_path": "/opt/csye6225/logs/webapp.log",
             "log_group_name": "csye6225",
             "log_stream_name": "webapp",
-            "retention_in_days": 7,
             "timezone": "UTC",
             "timestamp_format": "%Y-%m-%d %H:%M:%S"
           },
@@ -20,21 +19,18 @@
             "file_path": "/opt/csye6225/logs/webapp-error.log",
             "log_group_name": "csye6225",
             "log_stream_name": "webapp-error",
-            "retention_in_days": 7,
             "timezone": "UTC"
           },
           {
             "file_path": "/opt/csye6225/logs/exceptions.log",
             "log_group_name": "csye6225",
             "log_stream_name": "webapp-exceptions",
-            "retention_in_days": 30,
             "timezone": "UTC"
           },
           {
             "file_path": "/opt/csye6225/logs/rejections.log",
             "log_group_name": "csye6225",
             "log_stream_name": "webapp-rejections",
-            "retention_in_days": 30,
             "timezone": "UTC"
           }
         ]
