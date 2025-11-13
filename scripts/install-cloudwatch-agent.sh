@@ -12,7 +12,7 @@ sudo dpkg -i /tmp/amazon-cloudwatch-agent.deb
 # Verify installation
 if [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then
     echo "✓ CloudWatch agent installed successfully"
-    # Get version using status command instead of -version
+    # Get version using status command instead of -version...
     /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status || echo "Agent not running yet (expected)"
 else
     echo "✗ CloudWatch agent installation failed"
