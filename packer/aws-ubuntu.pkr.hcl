@@ -110,7 +110,7 @@ build {
   }
 
   # NEW: Install CloudWatch Unified Agent
- 
+
   provisioner "shell" {
     script = "../scripts/install-cloudwatch-agent.sh"
   }
