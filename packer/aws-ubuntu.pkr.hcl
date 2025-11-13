@@ -109,9 +109,8 @@ build {
     script = "../scripts/install-nodejs.sh"
   }
 
-  # ============================================
   # NEW: Install CloudWatch Unified Agent
-  # ============================================
+ 
   provisioner "shell" {
     script = "../scripts/install-cloudwatch-agent.sh"
   }
@@ -139,9 +138,7 @@ build {
     script = "../scripts/setup-application.sh"
   }
 
-  # ============================================
   # NEW: Copy CloudWatch configuration to AMI
-  # ============================================
   provisioner "file" {
     source      = "../scripts/cloudwatch-config.json"
     destination = "/tmp/cloudwatch-config.json"
@@ -172,9 +169,7 @@ build {
     ]
   }
 
-  # ============================================
   # NEW: Verify CloudWatch agent installation
-  # ============================================
   provisioner "shell" {
     inline = [
       "echo 'Verifying CloudWatch agent installation...'",
