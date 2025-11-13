@@ -1,79 +1,44 @@
-# Cloud-Native Web Application
+# CSYE 6225 - Cloud-Native Web Application
 
-RESTful API with automated AMI building, infrastructure as code, and CI/CD pipeline implementation.
-
-## Prerequisites
-
-- Node.js 20.x LTS
-- MySQL 8.0 or higher
-- Git
-- Packer (for AMI building)
-- Terraform (for infrastructure deployment)
-- AWS CLI configured with appropriate profiles
+Cloud-native RESTful web application with user management, product management, image uploads, and email verification.
 
 ## Technology Stack
 
-- **Runtime**: Node.js 20.x
-- **Framework**: Express.js
-- **Database**: MySQL 8.0
-- **ORM**: Sequelize
-- **Authentication**: Basic Auth (Token-based)
-- **Password Encryption**: BCrypt
-- **Testing**: Jest, SuperTest
-- **CI/CD**: GitHub Actions
-- **Infrastructure**: Packer, Terraform, AWS
+- **Runtime:** Node.js 20.x
+- **Framework:** Express.js
+- **Database:** MySQL 8.0 (Amazon RDS)
+- **ORM:** Sequelize
+- **Storage:** Amazon S3
+- **Authentication:** Basic Authentication (BCrypt)
+- **Monitoring:** CloudWatch Logs & Metrics, StatsD
+- **Email:** Amazon SES via Lambda
 
-## Repository Structure
+## Prerequisites
 
-```
-webapp/
-├── .github/
-│   └── workflows/
-│       ├── packer-status-check.yml  # Packer validation on PR
-│       └── packer-build.yml         # AMI build on merge
-├── config/
-│   └── database.js
-├── middleware/
-│   ├── auth.js
-│   └── validation.js
-├── models/
-│   ├── index.js
-│   ├── User.js
-│   ├── Product.js
-│   └── HealthCheck.js
-├── packer/
-│   └── aws-ubuntu.pkr.hcl          # Packer template for AMI
-├── routes/
-│   ├── health.js
-│   ├── users.js
-│   └── products.js
-├── scripts/
-│   ├── install-mysql.sh            # MySQL installation script
-│   ├── install-nodejs.sh           # Node.js installation script
-│   ├── setup-user.sh               # User creation script
-│   ├── setup-application.sh        # Application setup script
-│   └── webapp.service              # Systemd service file
-├── tests/
-│   ├── health.test.js
-│   ├── users.test.js
-│   ├── products.test.js
-│   └── integration/
-│       └── api.test.js
-├── .env.example
-├── .gitignore
-├── jest.config.js
-├── package.json
-├── package-lock.json
-├── README.md
-└── server.js
-```
+### Local Development
 
-## Local Development Setup
+- Node.js 20.x or higher
+- MySQL 8.0
+- AWS CLI configured
+- Git
+
+### AWS Resources (Deployed)
+
+- VPC with public/private subnets
+- Application Load Balancer
+- Auto Scaling Group (3-5 instances)
+- RDS MySQL instance
+- S3 bucket
+- SNS topic
+- Lambda function
+- DynamoDB table
+
+## Installation
 
 ### 1. Clone Repository
 
 ```bash
-git clone git@github.com:yourusername/webapp.git
+git clone git@github.com:YOUR-ORG/webapp.git
 cd webapp
 ```
 
@@ -83,198 +48,148 @@ cd webapp
 npm install
 ```
 
-### 3. Database Setup
-
-Create MySQL database:
-```sql
-CREATE DATABASE health_check_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'csye6225'@'localhost' IDENTIFIED BY 'MyPassword@123';
-GRANT ALL PRIVILEGES ON health_check_db.* TO 'csye6225'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-### 4. Environment Configuration
+### 3. Configure Environment
 
 Create `.env` file:
-```bash
-cp .env.example .env
-```
 
-Configure variables:
-```
+```env
 NODE_ENV=development
 PORT=8080
+
+# Database
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=health_check_db
-DB_USER=csye6225
-DB_PASS=MyPassword@123
-DB_DIALECT=mysql
+DB_NAME=csye6225
+DB_USER=root
+DB_PASS=your-password
+
+# AWS
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-bucket-name
+SNS_TOPIC_ARN=arn:aws:sns:...
+
+# Logging
+LOG_LEVEL=info
+BCRYPT_SALT_ROUNDS=10
+
+# Email Verification
+VERIFICATION_TOKEN_EXPIRY=60
+VERIFICATION_BASE_URL=http://localhost:8080
+```
+
+### 4. Setup Database
+
+```bash
+# Create database
+mysql -u root -p
+CREATE DATABASE csye6225;
+exit;
+
+# Tables created automatically by Sequelize
 ```
 
 ### 5. Run Application
 
 ```bash
-# Development mode
-npm run dev
-
-# Production mode
 npm start
 ```
 
-## AMI Building with Packer
+Application runs on: `http://localhost:8080`
 
-### Prerequisites
-- AWS CLI configured with dev profile
-- Packer installed locally
-- GitHub Actions secrets configured
+## API Endpoints
 
-### Build AMI Locally
+### User Management
+
+- `POST /v1/user` - Create user account
+- `GET /v1/user/:userId` - Get user (authenticated)
+- `PUT /v1/user/:userId` - Update user (authenticated)
+- `PATCH /v1/user/:userId` - Partial update user (authenticated)
+- `GET /v1/user/verify?email=...&token=...` - Verify email address
+
+### Product Management
+
+- `POST /v1/product` - Create product (authenticated)
+- `GET /v1/product/:productId` - Get product
+- `PUT /v1/product/:productId` - Update product (authenticated, owner only)
+- `PATCH /v1/product/:productId` - Partial update product (authenticated, owner only)
+- `DELETE /v1/product/:productId` - Delete product (authenticated, owner only)
+
+### Image Management
+
+- `POST /v1/product/:productId/image` - Upload image (authenticated)
+- `GET /v1/product/:productId/image` - List images
+- `GET /v1/product/:productId/image/:imageId` - Get image details
+- `DELETE /v1/product/:productId/image/:imageId` - Delete image (authenticated)
+
+### Health Check
+
+- `GET /healthz` - Health check endpoint
+
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run unit tests
+npm run test:unit
+
+# Run integration tests
+npm run test:integration
+```
+
+## Deployment
+
+### AMI Build (Packer)
+
+AMI is built automatically via GitHub Actions on merge to main branch.
+
+**Manual build:**
 
 ```bash
 cd packer
 packer init .
-packer validate .
-packer build aws-ubuntu.pkr.hcl
+packer build -var "subnet_id=subnet-xxx" aws-ubuntu.pkr.hcl
 ```
 
-### Automated AMI Building
+### Infrastructure Deployment
 
-AMIs are automatically built via GitHub Actions when PRs are merged to main:
-1. Packer format and validation checks run on PR
-2. AMI build triggers on merge
-3. AMI is shared between dev and demo AWS accounts
+See [tf-aws-infra](https://github.com/Vatsal-Naik-CSYE-6225/tf-aws-infra) repository for Terraform deployment.
 
-### AMI Contents
-- Ubuntu 24.04 LTS base
-- MySQL 8.0 (local installation)
-- Node.js 20.x LTS
-- Application code and dependencies
-- Systemd service for auto-start
-- csye6225 user with nologin shell
+## Email Verification Flow
 
-## Infrastructure Deployment
-
-Infrastructure is managed in the separate `tf-aws-infra` repository using Terraform.
-
-## API Documentation
-
-### Base URL
-```
-http://<ec2-public-ip>:8080
-```
-
-### Authentication
-Protected endpoints require Basic Authentication:
-```
-Authorization: Basic base64(email:password)
-```
-
-### Endpoints
-
-#### Health Check
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /healthz | No | Database connectivity check |
-
-#### User Management  
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | /v1/user | No | Create user account |
-| GET | /v1/user/self | Yes | Get authenticated user info |
-| PUT | /v1/user/self | Yes | Update all user fields |
-
-#### Product Management
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | /v1/product | Yes | Create new product |
-| GET | /v1/product/:productId | No | Get product details |
-| PUT | /v1/product/:productId | Yes* | Update all product fields |
-| PATCH | /v1/product/:productId | Yes* | Update specific fields |
-| DELETE | /v1/product/:productId | Yes* | Delete product |
-
-*Owner authorization required
-
-### Status Codes
-
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Resource created |
-| 204 | Success (no content) |
-| 400 | Bad request |
-| 401 | Unauthorized |
-| 403 | Forbidden |
-| 404 | Not found |
-| 405 | Method not allowed |
-
-## Testing
-
-### Run All Tests
-```bash
-npm test
-```
-
-### Test Coverage
-- Unit and integration tests for all endpoints
-- GitHub Actions CI runs tests on every PR
-- Coverage: ~65% statements
-
-## CI/CD Pipeline
-
-### GitHub Actions Workflows
-
-#### Packer Status Check (`packer-status-check.yml`)
-- Triggers: Pull requests modifying packer files
-- Validates Packer template formatting
-- Validates Packer configuration
-- Blocks merge on validation failure
-
-#### AMI Build (`packer-build.yml`)
-- Triggers: Merge to main branch
-- Runs integration tests
-- Builds application artifact
-- Creates AMI in dev account
-- Shares AMI with demo account
-
-### Branch Protection
-- Pull request required before merging
-- Status checks must pass
-- Packer validation must pass
-- No direct commits to main
+1. User creates account via `POST /v1/user`
+2. User record created with `email_verified: false`
+3. SNS message published with verification token
+4. Lambda function triggered, sends email via SES
+5. User receives email with verification link (expires in 60 seconds)
+6. User clicks link: `GET /v1/user/verify?email=...&token=...`
+7. If valid and not expired, `email_verified` set to `true`
 
 ## Security Features
 
-- BCrypt password hashing with salt rounds
-- Basic Authentication (stateless)
-- Input validation and sanitization
-- SQL injection prevention (Sequelize ORM)
-- System fields protection (account_created, account_updated)
-- Ownership-based access control for products
-- No git installed in production AMI
-- Application runs as non-privileged user (csye6225)
-- Database port (3306) not exposed externally
+- Passwords hashed with BCrypt (10 salt rounds)
+- Basic Authentication for protected endpoints
+- HTTPS/TLS encryption in production
+- KMS encryption for data at rest
+- Secrets Manager for credentials
+- IMDSv2 for EC2 metadata
 
-## Production Deployment
+## Monitoring
 
-1. AMI is built automatically via GitHub Actions
-2. Infrastructure deployed via Terraform (see tf-aws-infra repo)
-3. Application starts automatically via systemd
-4. No manual intervention required
+- **Logs:** CloudWatch Logs group `csye6225`
+- **Metrics:** CloudWatch namespace `CSYE6225`
+- **Custom Metrics:** API calls, response times, DB queries, S3 operations, SNS publishes
 
-## Environment Variables
+## CI/CD
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| NODE_ENV | Environment mode | development |
-| PORT | Application port | 8080 |
-| DB_HOST | Database host | localhost |
-| DB_PORT | Database port | 3306 |
-| DB_NAME | Database name | health_check_db |
-| DB_USER | Database user | csye6225 |
-| DB_PASS | Database password | - |
-| DB_DIALECT | Database dialect | mysql |
+- **Pull Request:** Runs tests, validates Packer template
+- **Merge to Main:** Builds AMI, shares with DEMO account, deploys to DEMO
 
-## Author
+## Authors
 
-Vatsal Naik - CSYE 6225 Cloud Computing
+- Vatsal Naik
+
+## License
+
+MIT
