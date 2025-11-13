@@ -113,9 +113,8 @@ build {
   provisioner "shell" {
     script = "../scripts/install-aws-cli.sh"
   }
-  
-  # NEW: Install CloudWatch Unified Agent
 
+  # NEW: Install CloudWatch Unified Agent
   provisioner "shell" {
     script = "../scripts/install-cloudwatch-agent.sh"
   }
