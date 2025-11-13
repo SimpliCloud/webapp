@@ -1,164 +1,203 @@
-name: Build AMI
+name: Build and Deploy AMI
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-env:
-  ARTIFACT_NAME: webapp
-  ARTIFACT_PATH: ./
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 
 jobs:
-  basic-validation:
+  build-and-deploy:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-
+    
     steps:
+      # Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Setup Node.js for tests
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
 
+      # Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      - name: Create test environment file
-        run: |
-          cat > .env <<EOF
-          NODE_ENV=test
-          PORT=8080
-          DB_HOST=localhost
-          DB_PORT=3306
-          DB_NAME=test_db
-          DB_USER=root
-          DB_PASS=test
-          AWS_REGION=us-east-1
-          S3_BUCKET_NAME=test-bucket
-          EOF
+      # Run tests
+      - name: Run unit tests
+        run: npm test
 
-      - name: Check application can start
-        run: |
-          # Just verify the app doesn't crash on startup
-          node -c server.js
-          echo "Application startup check completed"
-
-  build-artifact:
-    needs: basic-validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install production dependencies
-        run: npm ci --production
-
-      - name: Create deployment package
-        run: |
-          zip -r webapp.zip . \
-            -x "*.git*" \
-            -x "*.github*" \
-            -x "packer/*" \
-            -x "scripts/*" \
-            -x "test/*" \
-            -x "tests/*" \
-            -x "*.md" \
-            -x ".env.example" \
-            -x "*.test.js"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: webapp.zip
-          retention-days: 1
-
-  build-ami:
-    needs: build-artifact
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}
-
-      - name: Extract artifact
-        run: |
-          unzip -o webapp.zip
-          rm webapp.zip
-
+      # Setup Packer
       - name: Setup Packer
         uses: hashicorp/setup-packer@main
         with:
-          version: "latest"
+          version: 'latest'
 
-      - name: Configure AWS Credentials
+      # Initialize Packer
+      - name: Initialize Packer
+        working-directory: ./packer
+        run: packer init aws-ubuntu.pkr.hcl
+
+      # Validate Packer template
+      - name: Validate Packer template
+        working-directory: ./packer
+        run: packer validate aws-ubuntu.pkr.hcl
+
+      # Configure AWS credentials for DEV account
+      - name: Configure AWS credentials (DEV)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: us-east-1
 
-      - name: Get default VPC ID
-        id: vpc
+      # Build AMI in DEV account and share with DEMO
+      - name: Build AMI (DEV account)
+        working-directory: ./packer
         run: |
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query "Vpcs[0].VpcId" --output text)
-          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+          packer build \
+            -var "aws_region=us-east-1" \
+            -var "subnet_id=${{ secrets.SUBNET_ID_DEV }}" \
+            -var "demo_account_id=${{ secrets.AWS_ACCOUNT_ID_DEMO }}" \
+            aws-ubuntu.pkr.hcl
 
-      - name: Get subnet ID
-        id: subnet
-        run: |
-          SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${{ steps.vpc.outputs.vpc_id }}" --query "Subnets[0].SubnetId" --output text)
-          echo "subnet_id=$SUBNET_ID" >> $GITHUB_OUTPUT
-
-      - name: Packer Init
-        run: |
-          cd packer
-          packer init .
-
-      - name: Build AMI
-        env:
-          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
-          PKR_VAR_subnet_id: ${{ steps.subnet.outputs.subnet_id }}
-          PKR_VAR_demo_account_id: ${{ vars.DEMO_ACCOUNT_ID }}
-        run: |
-          cd packer
-          packer build -color=false .
-
-      - name: Get AMI ID
-        id: ami
+      # Get the latest AMI ID from DEV account
+      - name: Get Latest AMI ID
+        id: get-ami
         run: |
           AMI_ID=$(aws ec2 describe-images \
             --owners self \
             --filters "Name=name,Values=csye6225-webapp-*" \
-            --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+            --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
             --output text)
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
-          echo "AMI Created: $AMI_ID"
+          echo "Latest AMI ID: $AMI_ID"
 
-      - name: Create AMI artifact
-        run: |
-          echo "AMI_ID=${{ steps.ami.outputs.ami_id }}" > ami-id.txt
-          echo "REGION=${{ vars.AWS_REGION }}" >> ami-id.txt
-          echo "TIMESTAMP=$(date -u +%Y%m%d%H%M%S)" >> ami-id.txt
-
-      - name: Upload AMI ID artifact
-        uses: actions/upload-artifact@v4
+      # Configure AWS credentials for DEMO account
+      - name: Configure AWS credentials (DEMO)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: ami-id
-          path: ami-id.txt
-          retention-days: 7
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEMO }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEMO }}
+          aws-region: us-east-1
+
+      # Wait for AMI to be available in DEMO account
+      - name: Wait for AMI availability
+        run: |
+          echo "Waiting for AMI ${{ steps.get-ami.outputs.ami_id }} to be available..."
+          aws ec2 wait image-available \
+            --image-ids ${{ steps.get-ami.outputs.ami_id }} \
+            --region us-east-1
+          echo "AMI is now available in DEMO account"
+
+      # Get current Launch Template ID
+      - name: Get Launch Template ID
+        id: get-lt
+        run: |
+          LT_ID=$(aws ec2 describe-launch-templates \
+            --filters "Name=tag:Environment,Values=demo" \
+            --query 'LaunchTemplates[0].LaunchTemplateId' \
+            --output text)
+          echo "lt_id=$LT_ID" >> $GITHUB_OUTPUT
+          echo "Launch Template ID: $LT_ID"
+
+      # Create new Launch Template version
+      - name: Create Launch Template Version
+        id: create-lt-version
+        run: |
+          NEW_VERSION=$(aws ec2 create-launch-template-version \
+            --launch-template-id ${{ steps.get-lt.outputs.lt_id }} \
+            --source-version '$Latest' \
+            --launch-template-data '{"ImageId":"${{ steps.get-ami.outputs.ami_id }}"}' \
+            --query 'LaunchTemplateVersion.VersionNumber' \
+            --output text)
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Created Launch Template version: $NEW_VERSION"
+
+      # Set new version as default
+      - name: Set Launch Template Default Version
+        run: |
+          aws ec2 modify-launch-template \
+            --launch-template-id ${{ steps.get-lt.outputs.lt_id }} \
+            --default-version ${{ steps.create-lt-version.outputs.version }}
+          echo "Set version ${{ steps.create-lt-version.outputs.version }} as default"
+
+      # Get Auto Scaling Group name
+      - name: Get Auto Scaling Group Name
+        id: get-asg
+        run: |
+          ASG_NAME=$(aws autoscaling describe-auto-scaling-groups \
+            --query 'AutoScalingGroups[?Tags[?Key==`Environment` && Value==`demo`]].AutoScalingGroupName' \
+            --output text)
+          echo "asg_name=$ASG_NAME" >> $GITHUB_OUTPUT
+          echo "Auto Scaling Group: $ASG_NAME"
+
+      # Start instance refresh
+      - name: Start Instance Refresh
+        id: start-refresh
+        run: |
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name ${{ steps.get-asg.outputs.asg_name }} \
+            --preferences '{"MinHealthyPercentage":90,"InstanceWarmup":300}' \
+            --query 'InstanceRefreshId' \
+            --output text)
+          echo "refresh_id=$REFRESH_ID" >> $GITHUB_OUTPUT
+          echo "Started instance refresh: $REFRESH_ID"
+
+      # Wait for instance refresh to complete
+      - name: Wait for Instance Refresh
+        run: |
+          echo "Waiting for instance refresh to complete..."
+          echo "This may take 10-15 minutes..."
+          
+          while true; do
+            STATUS=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name ${{ steps.get-asg.outputs.asg_name }} \
+              --instance-refresh-ids ${{ steps.start-refresh.outputs.refresh_id }} \
+              --query 'InstanceRefreshes[0].Status' \
+              --output text)
+            
+            echo "Current status: $STATUS"
+            
+            if [ "$STATUS" == "Successful" ]; then
+              echo "Instance refresh completed successfully!"
+              break
+            elif [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Cancelled" ]; then
+              echo "Instance refresh failed with status: $STATUS"
+              
+              # Get detailed status
+              aws autoscaling describe-instance-refreshes \
+                --auto-scaling-group-name ${{ steps.get-asg.outputs.asg_name }} \
+                --instance-refresh-ids ${{ steps.start-refresh.outputs.refresh_id }}
+              
+              exit 1
+            fi
+            
+            sleep 30
+          done
+
+      # Deployment summary
+      - name: Deployment Summary
+        run: |
+          echo "==================================="
+          echo "Deployment Completed Successfully!"
+          echo "==================================="
+          echo "AMI ID: ${{ steps.get-ami.outputs.ami_id }}"
+          echo "Launch Template: ${{ steps.get-lt.outputs.lt_id }}"
+          echo "New Version: ${{ steps.create-lt-version.outputs.version }}"
+          echo "Auto Scaling Group: ${{ steps.get-asg.outputs.asg_name }}"
+          echo "Instance Refresh: ${{ steps.start-refresh.outputs.refresh_id }}"
+          echo "==================================="
+          
+          # Get current instance count
+          INSTANCE_COUNT=$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names ${{ steps.get-asg.outputs.asg_name }} \
+            --query 'AutoScalingGroups[0].DesiredCapacity' \
+            --output text)
+          
+          echo "Active Instances: $INSTANCE_COUNT"
+          echo "Application URL: https://demo.vatsalnaik.me"

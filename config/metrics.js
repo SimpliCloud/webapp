@@ -64,6 +64,13 @@ const metricsHelper = {
   // Gauge for active connections (optional)
   gaugeActiveConnections: (count) => {
     metrics.gauge('connections.active', count);
+  },
+
+  // Time SNS publish operation - ADD THIS
+  timingSnsPublish: (operation, duration) => {
+    metrics.timing('sns.publish_time', duration, {
+      operation
+    });
   }
 };
 

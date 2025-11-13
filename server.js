@@ -3,7 +3,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 require('dotenv').config();
 
-// Import logger and metrics (NEW)
+// Import logger and metrics
 const logger = require('./config/logger');
 const { metrics } = require('./config/metrics');
 const requestLogger = require('./middleware/requestLogger');
@@ -16,6 +16,7 @@ const healthRoutes = require('./routes/health');
 const userRoutes = require('./routes/users');
 const productRoutes = require('./routes/products');
 const imageRoutes = require('./routes/images');
+const verificationRoutes = require('./routes/verification'); // ADD THIS LINE
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -42,7 +43,7 @@ app.use(express.urlencoded({ extended: true }));
 // Disable Express server identification
 app.disable('x-powered-by');
 
-// Request logging and metrics middleware (NEW)
+// Request logging and metrics middleware
 app.use(requestLogger);
 
 // Mount routes
@@ -50,6 +51,7 @@ app.use('/', healthRoutes);
 app.use('/', userRoutes);
 app.use('/', productRoutes);
 app.use('/', imageRoutes);
+app.use('/', verificationRoutes); // ADD THIS LINE
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -66,7 +68,7 @@ app.use('*', (req, res) => {
     .json({ error: 'Endpoint not found' });
 });
 
-// Global error handler (ENHANCED)
+// Global error handler
 app.use((error, req, res, next) => {
   logger.error('Unhandled error', {
     error: error.message,

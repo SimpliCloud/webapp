@@ -10,6 +10,7 @@ const {
   checkNoPayload,
   rejectUnknownFields
 } = require('../middleware/validation');
+const { publishUserVerification } = require('../config/snsClient');
 
 // Allowed fields for user creation
 const CREATE_FIELDS = ['email', 'password', 'first_name', 'last_name'];
@@ -50,7 +51,26 @@ router.post('/v1/user',
       
       logger.info('User created successfully', {
         userId: user.id,
-        email: user.email
+        email: user.email,
+        email_verified: user.email_verified
+      });
+      
+      // Publish verification message to SNS
+      // Don't fail user creation if SNS publish fails
+      publishUserVerification({
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        verification_token: user.verification_token,
+        token_created_at: user.token_created_at
+      }).catch(error => {
+        // Log error but don't fail the request
+        logger.error('Failed to publish SNS message for user verification', {
+          userId: user.id,
+          email: user.email,
+          error: error.message
+        });
       });
       
       // Return user data (password excluded by toJSON method)
