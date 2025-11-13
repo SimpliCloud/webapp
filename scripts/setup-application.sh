@@ -3,7 +3,7 @@ set -e
 
 echo "Setting up web application..."
 
-# Clean and prepare application directory
+# Clean and prepare application directory...
 sudo rm -rf /opt/csye6225/*
 sudo mkdir -p /opt/csye6225/logs
 sudo mkdir -p /opt/csye6225/webapp
@@ -33,7 +33,7 @@ sudo touch /opt/csye6225/logs/webapp-error.log
 sudo touch /opt/csye6225/logs/exceptions.log
 sudo touch /opt/csye6225/logs/rejections.log
 
-# Set ownership AFTER all file operations
+# Set ownership AFTER all file operations...
 echo "Setting file permissions..."
 sudo chown -R csye6225:csye6225 /opt/csye6225
 
