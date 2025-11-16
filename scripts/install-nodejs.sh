@@ -7,7 +7,7 @@ echo "Installing Node.js 20.x LTS..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# Verify installation
+# Verify installation...
 node_version=$(node -v)
 npm_version=$(npm -v)
 echo "Node.js version: $node_version"
