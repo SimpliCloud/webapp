@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../config/logger');
+const { publishToSNS } = require('../config/snsClient');
 const {
   validateUserCreate,
   validateUserUpdate,
@@ -41,6 +42,7 @@ router.post('/v1/user',
       }
       
       // Create new user
+      // Note: beforeCreate hook automatically generates verification_token
       const user = await User.create({
         email,
         password,
@@ -50,8 +52,39 @@ router.post('/v1/user',
       
       logger.info('User created successfully', {
         userId: user.id,
-        email: user.email
+        email: user.email,
+        email_verified: user.email_verified
       });
+
+      // Send SNS notification for email verification
+      try {
+        const snsMessage = {
+          userId: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          verification_token: user.verification_token,
+          domain: process.env.DOMAIN_NAME || `${process.env.AWS_REGION}.amazonaws.com`
+        };
+
+        await publishToSNS(snsMessage, 'New User Registration - Email Verification');
+
+        logger.info('SNS notification sent for user registration', {
+          userId: user.id,
+          email: user.email
+        });
+
+      } catch (snsError) {
+        // Log SNS error but don't fail user creation
+        logger.error('Failed to send SNS notification', {
+          error: snsError.message,
+          userId: user.id,
+          email: user.email
+        });
+        
+        // User is still created successfully even if SNS fails
+        // This prevents SNS issues from blocking user registration
+      }
       
       // Return user data (password excluded by toJSON method)
       res.status(201).json(user);
@@ -63,19 +96,114 @@ router.post('/v1/user',
         email: req.body?.email
       });
       
-      // Handle Sequelize validation errors
       if (error.name === 'SequelizeValidationError') {
         const messages = error.errors.map(e => e.message);
         return res.status(400).json({ errors: messages });
       }
       
-      // Handle unique constraint violation
       if (error.name === 'SequelizeUniqueConstraintError') {
         return res.status(400).json({ error: 'User with this email already exists' });
       }
       
       res.status(400).json({ error: 'Failed to create user' });
     }
+});
+
+// GET /v1/user/verify - Verify user email
+router.get('/v1/user/verify', async (req, res) => {
+  try {
+    const { email, token } = req.query;
+
+    logger.info('Email verification request received', {
+      email,
+      tokenProvided: !!token
+    });
+
+    // Validate required parameters
+    if (!email || !token) {
+      logger.warn('Email verification failed - missing parameters', {
+        email: !!email,
+        token: !!token
+      });
+      return res.status(400).json({
+        error: 'Email and token parameters are required'
+      });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      logger.warn('Email verification failed - user not found', {
+        email
+      });
+      return res.status(404).json({
+        error: 'User not found'
+      });
+    }
+
+    // Check if already verified
+    if (user.email_verified) {
+      logger.info('Email already verified', {
+        userId: user.id,
+        email: user.email
+      });
+      return res.status(200).json({
+        message: 'Email already verified',
+        email_verified: true
+      });
+    }
+
+    // Validate token matches
+    if (user.verification_token !== token) {
+      logger.warn('Email verification failed - invalid token', {
+        userId: user.id,
+        email: user.email
+      });
+      return res.status(400).json({
+        error: 'Invalid verification token'
+      });
+    }
+
+    // Check if token is expired (1 minute expiry)
+    if (user.isTokenExpired()) {
+      logger.warn('Email verification failed - token expired', {
+        userId: user.id,
+        email: user.email,
+        tokenAge: Date.now() - new Date(user.token_created_at).getTime()
+      });
+      return res.status(400).json({
+        error: 'Verification token has expired. Please request a new verification email.'
+      });
+    }
+
+    // Token is valid - verify the email
+    user.email_verified = true;
+    user.verification_token = null;  // Clear token after use
+    user.token_created_at = null;
+    await user.save();
+
+    logger.info('Email verified successfully', {
+      userId: user.id,
+      email: user.email
+    });
+
+    res.status(200).json({
+      message: 'Email verified successfully',
+      email_verified: true
+    });
+
+  } catch (error) {
+    logger.error('Email verification error', {
+      error: error.message,
+      stack: error.stack,
+      email: req.query?.email
+    });
+    
+    res.status(500).json({
+      error: 'Internal server error'
+    });
+  }
 });
 
 // GET /v1/user/{userId} - Get user info by ID (requires authentication)
