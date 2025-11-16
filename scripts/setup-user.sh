@@ -13,7 +13,7 @@ sudo useradd -r -g csye6225 -s /usr/sbin/nologin -d /opt/csye6225 -m csye6225 ||
 sudo mkdir -p /opt/csye6225
 sudo mkdir -p /opt/csye6225/logs
 
-# Set ownership
+# Set ownership!!
 sudo chown -R csye6225:csye6225 /opt/csye6225
 
 echo "User and directory setup completed"
