@@ -3,11 +3,11 @@ set -e
 
 echo "Installing AWS CLI v2..."
 
-# Download AWS CLI installer..
+# Download AWS CLI installer
 cd /tmp
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 
-# Install unzip if not present...
+# Install unzip if not present
 sudo apt-get update -qq
 sudo apt-get install -y unzip
 
