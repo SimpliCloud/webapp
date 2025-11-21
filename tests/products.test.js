@@ -46,6 +46,18 @@ describe('Product Management Endpoints', () => {
             .post('/v1/user')
             .send(user2);
 
+        const createdUser1 = await User.findOne({ where: { email: user1.email } });
+        const createdUser2 = await User.findOne({ where: { email: user2.email } });
+
+        if (createdUser1) {
+            createdUser1.email_verified = true;
+            await createdUser1.save();
+        }
+
+        if (createdUser2) {
+            createdUser2.email_verified = true;
+            await createdUser2.save();
+        }
 
         // Create auth tokens
         authToken1 = Buffer.from(`${user1.email}:${user1.password}`).toString('base64');
