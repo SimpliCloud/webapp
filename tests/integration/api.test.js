@@ -64,6 +64,10 @@ describe('API Integration Tests', () => {
 
         userId1 = response.body.id;
         authToken1 = Buffer.from(`${testUser.email}:${testUser.password}`).toString('base64');
+
+        const user = await User.findByPk(userId1);
+        user.email_verified = true;
+        await user.save();
       });
 
       test('should create second user with different valid inputs', async () => {
@@ -74,6 +78,10 @@ describe('API Integration Tests', () => {
 
         userId2 = response.body.id;
         authToken2 = Buffer.from(`${testUser2.email}:${testUser2.password}`).toString('base64');
+
+        const user = await User.findByPk(userId2);
+        user.email_verified = true;
+        await user.save();
       });
 
       test('should create product with valid data', async () => {
