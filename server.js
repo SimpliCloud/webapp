@@ -16,6 +16,7 @@ const healthRoutes = require('./routes/health');
 const userRoutes = require('./routes/users');
 const productRoutes = require('./routes/products');
 const imageRoutes = require('./routes/images');
+const cicdRoutes = require('./routes/cicd');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -50,6 +51,7 @@ app.use('/', healthRoutes);
 app.use('/', userRoutes);
 app.use('/', productRoutes);
 app.use('/', imageRoutes);
+app.use('/', cicdRoutes); 
 
 // 404 handler
 app.use('*', (req, res) => {
