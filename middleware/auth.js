@@ -1,6 +1,7 @@
 const User = require('../models/User');
+const logger = require('../config/logger');
 
-// Basic Authentication Middleware
+// Basic Authentication Middleware with Email Verification Check
 const authenticate = async (req, res, next) => {
   try {
     // Check for Authorization header
@@ -40,13 +41,28 @@ const authenticate = async (req, res, next) => {
         .set('WWW-Authenticate', 'Basic realm="User Authentication"')
         .json({ error: 'Invalid email or password' });
     }
+    // Check if email is verified
+    if (!user.email_verified) {
+      logger.warn('Access denied - email not verified', {
+        userId: user.id,
+        email: user.email
+      });
+      
+      return res.status(403).json({
+        error: 'Email not verified. Please verify your email before accessing this resource.',
+        email_verified: false
+      });
+    }
     
     // Attach user to request object for use in routes
     req.user = user;
     next();
     
   } catch (error) {
-    console.error('Authentication error:', error);
+    logger.error('Authentication error', {
+      error: error.message,
+      stack: error.stack
+    });
     return res.status(401)
       .set('WWW-Authenticate', 'Basic realm="User Authentication"')
       .json({ error: 'Authentication failed' });
@@ -59,12 +75,10 @@ const optionalAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
-      // No authentication provided, continue without user
       req.user = null;
       return next();
     }
     
-    // Try to authenticate
     const authType = authHeader.split(' ')[0];
     const authValue = authHeader.split(' ')[1];
     
@@ -74,14 +88,19 @@ const optionalAuth = async (req, res, next) => {
       
       if (email && password) {
         const user = await User.authenticate(email, password);
-        req.user = user;
+        
+        // Check email verification for optional auth too
+        if (user && user.email_verified) {
+          req.user = user;
+        } else {
+          req.user = null;
+        }
       }
     }
     
     next();
     
   } catch (error) {
-    // If authentication fails, continue without user
     req.user = null;
     next();
   }

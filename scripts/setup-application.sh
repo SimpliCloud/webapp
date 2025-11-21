@@ -17,7 +17,7 @@ sudo cp -r /tmp/middleware /opt/csye6225/webapp/ 2>/dev/null || true
 sudo cp -r /tmp/models /opt/csye6225/webapp/ 2>/dev/null || true
 sudo cp -r /tmp/routes /opt/csye6225/webapp/ 2>/dev/null || true
 
-# Create a placeholder .env file that will be replaced by user data...
+# Create a placeholder .env file that will be replaced by user data
 echo "Creating placeholder .env file..."
 sudo tee /opt/csye6225/webapp/.env > /dev/null << 'EOF'
 NODE_ENV=production
