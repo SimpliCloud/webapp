@@ -15,7 +15,7 @@ sudo apt-get install -y unzip
 unzip -q awscliv2.zip
 sudo ./aws/install
 
-# Verify installation..
+# Verify installation
 aws --version
 
 # Clean up
