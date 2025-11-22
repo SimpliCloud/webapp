@@ -158,7 +158,7 @@ build {
     ]
   }
 
-  # Configure systemd service
+  # Configure systemd service for the web application
   provisioner "file" {
     source      = "../scripts/webapp.service"
     destination = "/tmp/webapp.service"
