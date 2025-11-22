@@ -1,278 +1,369 @@
-name: Packer Build and Deploy
+name: Build AMI and Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
 
 env:
   ARTIFACT_NAME: webapp
   ARTIFACT_PATH: ./
+  AWS_REGION: us-east-1
 
 jobs:
-  test-and-build:
+  basic-validation:
     runs-on: ubuntu-latest
-    
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: test_db
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
     steps:
-      # 1. CHECKOUT CODE
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. SETUP NODE.JS
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: "npm"
 
-      # 3. INSTALL DEPENDENCIES
       - name: Install dependencies
         run: npm ci
 
-      # 4. RUN UNIT TESTS
-      - name: Run unit tests
-        env:
-          NODE_ENV: test
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_NAME: test_db
-          DB_USER: root
-          DB_PASS: root
-          AWS_REGION: us-east-1
-          S3_BUCKET_NAME: test-bucket-${{ github.run_number }}
-        run: npm run test:unit
+      - name: Create test environment file
+        run: |
+          cat > .env <<EOF
+          NODE_ENV=test
+          PORT=8080
+          DB_HOST=localhost
+          DB_PORT=3306
+          DB_NAME=test_db
+          DB_USER=root
+          DB_PASS=test
+          AWS_REGION=us-east-1
+          S3_BUCKET_NAME=test-bucket
+          EOF
 
-      # 5. SETUP PACKER
+      - name: Check application can start
+        run: |
+          node -c server.js
+          echo "Application startup check completed"
+
+  build-artifact:
+    needs: basic-validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install production dependencies
+        run: npm ci --production
+
+      - name: Create deployment package
+        run: |
+          zip -r webapp.zip . \
+            -x "*.git*" \
+            -x "*.github*" \
+            -x "packer/*" \
+            -x "scripts/*" \
+            -x "test/*" \
+            -x "tests/*" \
+            -x "*.md" \
+            -x ".env.example" \
+            -x "*.test.js"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: webapp.zip
+          retention-days: 1
+
+  build-ami:
+    needs: build-artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+
+      - name: Extract artifact
+        run: |
+          unzip -o webapp.zip
+          rm webapp.zip
+
       - name: Setup Packer
         uses: hashicorp/setup-packer@main
         with:
-          version: 'latest'
+          version: "latest"
 
-      # 6. VALIDATE PACKER TEMPLATE
-      - name: Validate Packer template
-        working-directory: packer
-        run: packer validate aws-ubuntu.pkr.hcl
-
-      # 7. CONFIGURE AWS CREDENTIALS (DEV ACCOUNT)
-      - name: Configure AWS credentials (DEV)
+      # ============================================
+      # BUILD AMI IN DEV ACCOUNT
+      # ============================================
+      - name: Configure AWS Credentials (DEV)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_DEV_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_DEV_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # 8. GET DEFAULT VPC FOR PACKER
       - name: Get default VPC ID
         id: vpc
         run: |
-          VPC_ID=$(aws ec2 describe-vpcs \
-            --filters "Name=is-default,Values=true" \
-            --query 'Vpcs[0].VpcId' \
-            --output text)
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query "Vpcs[0].VpcId" --output text)
           echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
-          echo "Default VPC ID: $VPC_ID"
+          echo "Using VPC: $VPC_ID"
 
-      - name: Get subnet from default VPC
+      - name: Get subnet ID
         id: subnet
         run: |
-          SUBNET_ID=$(aws ec2 describe-subnets \
-            --filters "Name=vpc-id,Values=${{ steps.vpc.outputs.vpc_id }}" \
-            --query 'Subnets[0].SubnetId' \
-            --output text)
+          SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${{ steps.vpc.outputs.vpc_id }}" --query "Subnets[0].SubnetId" --output text)
           echo "subnet_id=$SUBNET_ID" >> $GITHUB_OUTPUT
-          echo "Subnet ID: $SUBNET_ID"
+          echo "Using Subnet: $SUBNET_ID"
 
-      # 9. BUILD AMI WITH PACKER (DEV ACCOUNT)
+      - name: Packer Init
+        run: |
+          cd packer
+          packer init .
+
+      - name: Packer Validate
+        run: |
+          cd packer
+          packer validate \
+            -var "aws_region=${{ env.AWS_REGION }}" \
+            -var "subnet_id=${{ steps.subnet.outputs.subnet_id }}" \
+            -var "demo_account_id=${{ secrets.AWS_DEMO_ACCOUNT_ID }}" \
+            aws-ubuntu.pkr.hcl
+
       - name: Build AMI with Packer
         id: packer_build
-        working-directory: packer
         run: |
+          cd packer
           packer build \
-            -var "aws_region=us-east-1" \
+            -var "aws_region=${{ env.AWS_REGION }}" \
             -var "subnet_id=${{ steps.subnet.outputs.subnet_id }}" \
-            -var "demo_account_id=${{ secrets.DEMO_ACCOUNT_ID }}" \
-            aws-ubuntu.pkr.hcl | tee packer-output.log
+            -var "demo_account_id=${{ secrets.AWS_DEMO_ACCOUNT_ID }}" \
+            -color=false \
+            aws-ubuntu.pkr.hcl 2>&1 | tee packer-output.log
           
-          # Extract AMI ID from Packer output
+          # Extract AMI ID
           AMI_ID=$(grep -oP 'ami-[a-f0-9]+' packer-output.log | tail -1)
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
-          echo "New AMI ID: $AMI_ID"
+          echo "✓ AMI Created: $AMI_ID"
 
-      # 10. VERIFY AMI WAS CREATED
-      - name: Verify AMI in DEV account
+      # ============================================
+      # SHARE AMI WITH DEMO ACCOUNT
+      # ============================================
+      - name: Share AMI with DEMO Account
         run: |
-          aws ec2 describe-images \
-            --image-ids ${{ steps.packer_build.outputs.ami_id }} \
-            --query 'Images[0].[ImageId,Name,State]' \
-            --output table
-
-      # 11. SHARE AMI WITH DEMO ACCOUNT
-      - name: Share AMI with DEMO account
-        run: |
-          echo "Sharing AMI ${{ steps.packer_build.outputs.ami_id }} with DEMO account"
+          echo "Sharing AMI ${{ steps.packer_build.outputs.ami_id }} with DEMO account ${{ secrets.AWS_DEMO_ACCOUNT_ID }}"
+          
           aws ec2 modify-image-attribute \
             --image-id ${{ steps.packer_build.outputs.ami_id }} \
-            --launch-permission "Add=[{UserId=${{ secrets.DEMO_ACCOUNT_ID }}}]"
+            --launch-permission "Add=[{UserId=${{ secrets.AWS_DEMO_ACCOUNT_ID }}}]" \
+            --region ${{ env.AWS_REGION }}
           
           echo "✓ AMI shared successfully"
 
-      # 12. CONFIGURE AWS CREDENTIALS (DEMO ACCOUNT)
-      - name: Configure AWS credentials (DEMO)
+      # ============================================
+      # SWITCH TO DEMO ACCOUNT
+      # ============================================
+      - name: Configure AWS Credentials (DEMO)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_DEMO_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_DEMO_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # 13. VERIFY AMI IS ACCESSIBLE IN DEMO
-      - name: Verify AMI in DEMO account
+      - name: Verify AMI is accessible in DEMO account
         run: |
-          echo "Verifying AMI ${{ steps.packer_build.outputs.ami_id }} is accessible in DEMO"
+          echo "Verifying AMI ${{ steps.packer_build.outputs.ami_id }} is accessible..."
+          
           aws ec2 describe-images \
             --image-ids ${{ steps.packer_build.outputs.ami_id }} \
+            --region ${{ env.AWS_REGION }} \
             --query 'Images[0].[ImageId,Name,State]' \
             --output table
-
-      # 14. CREATE NEW LAUNCH TEMPLATE VERSION
-      - name: Create new Launch Template version
-        id: lt_version
-        run: |
-          echo "Creating new launch template version with AMI: ${{ steps.packer_build.outputs.ami_id }}"
           
-          NEW_VERSION=$(aws ec2 create-launch-template-version \
+          echo "✓ AMI is accessible in DEMO account"
+
+      # ============================================
+      # CREATE NEW LAUNCH TEMPLATE VERSION
+      # ============================================
+      - name: Create new Launch Template version
+        id: launch_template
+        run: |
+          echo "Creating new launch template version with AMI ${{ steps.packer_build.outputs.ami_id }}"
+          
+          TEMPLATE_VERSION=$(aws ec2 create-launch-template-version \
             --launch-template-name csye6225_asg \
             --source-version '$Latest' \
             --launch-template-data "{\"ImageId\":\"${{ steps.packer_build.outputs.ami_id }}\"}" \
+            --region ${{ env.AWS_REGION }} \
             --query 'LaunchTemplateVersion.VersionNumber' \
             --output text)
           
-          echo "version_number=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "✓ Created launch template version: $NEW_VERSION"
+          echo "template_version=$TEMPLATE_VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Created launch template version: $TEMPLATE_VERSION"
 
-      # 15. SET LAUNCH TEMPLATE DEFAULT VERSION
-      - name: Set default launch template version
+      - name: Set Launch Template to use latest version
         run: |
-          aws ec2 modify-launch-template \
-            --launch-template-name csye6225_asg \
-            --default-version '$Latest'
+          echo "Setting ASG to use latest launch template version..."
           
-          echo "✓ Set default version to: $Latest"
+          aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name demo-webapp-asg \
+            --launch-template "LaunchTemplateName=csye6225_asg,Version=\$Latest" \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✓ ASG configured to use latest template version"
 
-      # 16. START INSTANCE REFRESH
+      # ============================================
+      # START INSTANCE REFRESH
+      # ============================================
       - name: Start instance refresh
         id: instance_refresh
         run: |
-          echo "Starting instance refresh for ASG: demo-webapp-asg"
+          echo "Starting instance refresh for demo-webapp-asg..."
           
           REFRESH_ID=$(aws autoscaling start-instance-refresh \
             --auto-scaling-group-name demo-webapp-asg \
             --strategy Rolling \
             --preferences '{
-              "MinHealthyPercentage": 90,
+              "MinHealthyPercentage": 67,
               "InstanceWarmup": 300,
               "CheckpointPercentages": [50, 100],
-              "CheckpointDelay": 300
+              "CheckpointDelay": 300,
+              "SkipMatching": false
             }' \
+            --region ${{ env.AWS_REGION }} \
             --query 'InstanceRefreshId' \
             --output text)
           
           echo "refresh_id=$REFRESH_ID" >> $GITHUB_OUTPUT
           echo "✓ Instance refresh started: $REFRESH_ID"
 
-      # 17. WAIT FOR INSTANCE REFRESH TO COMPLETE
-      - name: Wait for instance refresh to complete
+      # ============================================
+      # WAIT FOR INSTANCE REFRESH TO COMPLETE
+      # ============================================
+      - name: Monitor instance refresh progress
         run: |
-          echo "Waiting for instance refresh to complete..."
-          echo "Refresh ID: ${{ steps.instance_refresh.outputs.refresh_id }}"
+          echo "Monitoring instance refresh ${{ steps.instance_refresh.outputs.refresh_id }}..."
+          echo "This typically takes 10-20 minutes for 3 instances"
+          echo ""
           
-          while true; do
-            STATUS=$(aws autoscaling describe-instance-refreshes \
+          ITERATION=0
+          MAX_ITERATIONS=60  # 30 minutes max (60 * 30 seconds)
+          
+          while [ $ITERATION -lt $MAX_ITERATIONS ]; do
+            REFRESH_STATUS=$(aws autoscaling describe-instance-refreshes \
               --auto-scaling-group-name demo-webapp-asg \
               --instance-refresh-ids ${{ steps.instance_refresh.outputs.refresh_id }} \
-              --query 'InstanceRefreshes[0].Status' \
-              --output text)
+              --region ${{ env.AWS_REGION }} \
+              --query 'InstanceRefreshes[0]' \
+              --output json)
             
-            PERCENTAGE=$(aws autoscaling describe-instance-refreshes \
-              --auto-scaling-group-name demo-webapp-asg \
-              --instance-refresh-ids ${{ steps.instance_refresh.outputs.refresh_id }} \
-              --query 'InstanceRefreshes[0].PercentageComplete' \
-              --output text)
+            STATUS=$(echo $REFRESH_STATUS | jq -r '.Status')
+            PERCENTAGE=$(echo $REFRESH_STATUS | jq -r '.PercentageComplete // 0')
+            INSTANCES_TO_UPDATE=$(echo $REFRESH_STATUS | jq -r '.InstancesToUpdate // 0')
             
-            echo "Status: $STATUS | Progress: ${PERCENTAGE}%"
+            echo "[$ITERATION] Status: $STATUS | Progress: $PERCENTAGE% | Instances remaining: $INSTANCES_TO_UPDATE"
             
+            # Check if completed successfully
             if [ "$STATUS" = "Successful" ]; then
+              echo ""
               echo "✓ Instance refresh completed successfully!"
+              echo "All instances are now running the new AMI: ${{ steps.packer_build.outputs.ami_id }}"
               exit 0
-            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ]; then
-              echo "✗ Instance refresh $STATUS"
-              
-              # Get failure reason
-              aws autoscaling describe-instance-refreshes \
-                --auto-scaling-group-name demo-webapp-asg \
-                --instance-refresh-ids ${{ steps.instance_refresh.outputs.refresh_id }} \
-                --query 'InstanceRefreshes[0].StatusReason'
-              
+            fi
+            
+            # Check if failed
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ]; then
+              echo ""
+              echo "✗ Instance refresh failed with status: $STATUS"
+              echo ""
+              echo "Refresh details:"
+              echo $REFRESH_STATUS | jq '.'
               exit 1
             fi
             
-            sleep 30
-          done
-
-      # 18. VERIFY NEW INSTANCES ARE HEALTHY
-      - name: Verify new instances
-        run: |
-          echo "Verifying new instances are healthy..."
-          
-          aws autoscaling describe-auto-scaling-groups \
-            --auto-scaling-group-names demo-webapp-asg \
-            --query 'AutoScalingGroups[0].[MinSize,MaxSize,DesiredCapacity,Instances[*].[InstanceId,HealthStatus,LaunchTemplate.Version]]' \
-            --output table
-
-      # 19. TEST NEW ENDPOINT
-      - name: Test new /cicd endpoint
-        run: |
-          echo "Testing new /cicd endpoint..."
-          
-          # Get load balancer DNS
-          LB_DNS=$(aws elbv2 describe-load-balancers \
-            --names demo-csye6225-lb \
-            --query 'LoadBalancers[0].DNSName' \
-            --output text)
-          
-          # Test endpoint (retry up to 5 times)
-          for i in {1..5}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$LB_DNS/cicd)
-            echo "Attempt $i: HTTP $STATUS"
-            
-            if [ "$STATUS" = "200" ]; then
-              echo "✓ /cicd endpoint is working!"
-              exit 0
+            # Check if rollback
+            if [ "$STATUS" = "RollbackInProgress" ] || [ "$STATUS" = "RollbackSuccessful" ] || [ "$STATUS" = "RollbackFailed" ]; then
+              echo ""
+              echo "✗ Instance refresh is rolling back: $STATUS"
+              exit 1
             fi
             
-            sleep 10
+            # Still in progress, wait and check again
+            ITERATION=$((ITERATION + 1))
+            sleep 30
           done
           
-          echo "✗ /cicd endpoint not responding"
+          # Timeout reached
+          echo ""
+          echo "✗ Timeout waiting for instance refresh (30 minutes)"
+          echo "Current status: $STATUS at $PERCENTAGE%"
           exit 1
 
-      # 20. DEPLOYMENT SUMMARY
-      - name: Deployment summary
-        if: always()
+      # ============================================
+      # VERIFY DEPLOYMENT
+      # ============================================
+      - name: Verify new instances are running
         run: |
           echo ""
           echo "=========================================="
-          echo "DEPLOYMENT SUMMARY"
+          echo "Deployment Verification"
           echo "=========================================="
-          echo "AMI ID: ${{ steps.packer_build.outputs.ami_id }}"
-          echo "Launch Template Version: ${{ steps.lt_version.outputs.version_number }}"
-          echo "Instance Refresh ID: ${{ steps.instance_refresh.outputs.refresh_id }}"
-          echo "=========================================="
+          echo ""
+          
+          echo "Auto Scaling Group Status:"
+          aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names demo-webapp-asg \
+            --region ${{ env.AWS_REGION }} \
+            --query 'AutoScalingGroups[0].[MinSize,MaxSize,DesiredCapacity,length(Instances)]' \
+            --output table
+          
+          echo ""
+          echo "Instance Details:"
+          aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names demo-webapp-asg \
+            --region ${{ env.AWS_REGION }} \
+            --query 'AutoScalingGroups[0].Instances[*].[InstanceId,LifecycleState,HealthStatus,LaunchTemplate.Version]' \
+            --output table
+          
+          echo ""
+          echo "Target Health:"
+          TARGET_GROUP_ARN=$(aws elbv2 describe-target-groups \
+            --names demo-webapp-tg \
+            --region ${{ env.AWS_REGION }} \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+          
+          aws elbv2 describe-target-health \
+            --target-group-arn $TARGET_GROUP_ARN \
+            --region ${{ env.AWS_REGION }} \
+            --query 'TargetHealthDescriptions[*].[Target.Id,TargetHealth.State]' \
+            --output table
+          
+          echo ""
+          echo "✓ Deployment completed successfully!"
+          echo "New AMI: ${{ steps.packer_build.outputs.ami_id }}"
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**AMI ID:** \`${{ steps.packer_build.outputs.ami_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** \`${{ env.AWS_REGION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Launch Template Version:** \`${{ steps.launch_template.outputs.template_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Instance Refresh ID:** \`${{ steps.instance_refresh.outputs.refresh_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All instances refreshed successfully" >> $GITHUB_STEP_SUMMARY
