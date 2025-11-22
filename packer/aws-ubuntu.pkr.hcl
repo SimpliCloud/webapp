@@ -142,7 +142,7 @@ build {
     script = "../scripts/setup-application.sh"
   }
 
-  # NEW: Copy CloudWatch configuration to AMI....
+  # NEW: Copy CloudWatch configuration to AMI
   provisioner "file" {
     source      = "../scripts/cloudwatch-config.json"
     destination = "/tmp/cloudwatch-config.json"
