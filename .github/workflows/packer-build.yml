@@ -141,7 +141,7 @@ jobs:
           packer validate \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "subnet_id=${{ steps.subnet.outputs.subnet_id }}" \
-            -var "demo_account_id=${{ secrets.AWS_DEMO_ACCOUNT_ID }}" \
+            -var "demo_account_id=${{ secrets.DEMO_ACCOUNT_ID }}" \
             aws-ubuntu.pkr.hcl
 
       - name: Build AMI with Packer
@@ -151,7 +151,7 @@ jobs:
           packer build \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "subnet_id=${{ steps.subnet.outputs.subnet_id }}" \
-            -var "demo_account_id=${{ secrets.AWS_DEMO_ACCOUNT_ID }}" \
+            -var "demo_account_id=${{ secrets.DEMO_ACCOUNT_ID }}" \
             -color=false \
             aws-ubuntu.pkr.hcl 2>&1 | tee packer-output.log
           
@@ -165,11 +165,11 @@ jobs:
       # ============================================
       - name: Share AMI with DEMO Account
         run: |
-          echo "Sharing AMI ${{ steps.packer_build.outputs.ami_id }} with DEMO account ${{ secrets.AWS_DEMO_ACCOUNT_ID }}"
+          echo "Sharing AMI ${{ steps.packer_build.outputs.ami_id }} with DEMO account ${{ secrets.DEMO_ACCOUNT_ID }}"
           
           aws ec2 modify-image-attribute \
             --image-id ${{ steps.packer_build.outputs.ami_id }} \
-            --launch-permission "Add=[{UserId=${{ secrets.AWS_DEMO_ACCOUNT_ID }}}]" \
+            --launch-permission "Add=[{UserId=${{ secrets.DEMO_ACCOUNT_ID }}}]" \
             --region ${{ env.AWS_REGION }}
           
           echo "✓ AMI shared successfully"
