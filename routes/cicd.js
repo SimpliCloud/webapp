@@ -3,7 +3,7 @@ const router = express.Router();
 const logger = require('../config/logger');
 
 // CICD check endpoint: GET /cicd - demonstrates instance refresh
-router.get('/cicd', async (req, res) => {
+router.get('/cicc', async (req, res) => {
   try {
     // Payload validation - same as healthz
     const hasQueryParams = Object.keys(req.query).length > 0;
@@ -66,7 +66,7 @@ router.get('/cicd', async (req, res) => {
 });
 
 // Handle all other HTTP methods
-router.all('/cicd', (req, res) => {
+router.all('/cicc', (req, res) => {
   if (req.method === 'HEAD') {
     logger.warn('CICD check - HEAD method not allowed', {
       method: req.method,
