@@ -1,4 +1,4 @@
-# CSYE 6225 - Cloud-Native Web Application
+3 Cloud-Native Web Application
 
 Cloud-native RESTful web application with user management, product management, image uploads, and email verification.
 
