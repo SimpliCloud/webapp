@@ -1,195 +1,191 @@
-3 Cloud-Native Web Application
+# SimpliCloud – Serverless E-Commerce Platform (Application Layer)
 
-Cloud-native RESTful web application with user management, product management, image uploads, and email verification.
+SimpliCloud is a cloud-native, security-focused, and scalable e-commerce backend designed to demonstrate how easily modern applications can be built and deployed using AWS-managed services and Infrastructure as Code.  
+This repository contains the **application layer**—including user management, product handling, media workflows, authentication, analytics, and observability.
 
-## Technology Stack
+---
 
-- **Runtime:** Node.js 20.x
-- **Framework:** Express.js
-- **Database:** MySQL 8.0 (Amazon RDS)
-- **ORM:** Sequelize
-- **Storage:** Amazon S3
-- **Authentication:** Basic Authentication (BCrypt)
-- **Monitoring:** CloudWatch Logs & Metrics, StatsD
-- **Email:** Amazon SES via Lambda
+## 🚀 Features & Capabilities
 
-## Prerequisites
+### 🔐 Authentication & User Security
+- **JWT-based authentication** with access + refresh tokens  
+- **Multi-Factor Authentication (MFA)** via SMS/TOTP  
+- **Email verification**, secure email-change workflow  
+- **Password reset** with time-limited signed tokens  
+- **IAM-based scoped permissions**  
+- **Password hashing with BCrypt (10 rounds)**  
+- Encrypted data at rest (AWS KMS) and TLS for all production traffic  
 
-### Local Development
+---
 
-- Node.js 20.x or higher
-- MySQL 8.0
-- AWS CLI configured
-- Git
+### 🛒 Product & Media Management
+- CRUD operations for products with ownership validation  
+- S3-backed image upload, listing, retrieval, and deletion  
+- **Lambda-based serverless image processing** (auto-resize/compression)  
+- **CloudFront CDN** for low-latency media delivery  
+- Versioned uploads, lifecycle configuration, MIME validation  
 
-### AWS Resources (Deployed)
+---
 
-- VPC with public/private subnets
-- Application Load Balancer
-- Auto Scaling Group (3-5 instances)
-- RDS MySQL instance
-- S3 bucket
-- SNS topic
-- Lambda function
-- DynamoDB table
+### 🔎 Search, Performance & Reliability
+- **OpenSearch** full-text + faceted search  
+- **Redis caching** (ElastiCache) for product listings & sessions  
+- **API Gateway rate limiting + WAF rules** for DDoS mitigation  
+- **Per-user throttling policies**  
+- MySQL query optimization through indexing and schema design  
 
-## Installation
+---
+
+### 📊 Observability & Analytics
+- **AWS X-Ray** for distributed tracing  
+- **CloudWatch dashboards & alarms** for app-level metrics  
+- **Real-time analytics pipeline** using **Amazon Kinesis**  
+- Request correlation IDs for end-to-end debugging  
+- Structured application logs with Winston → CloudWatch Logs  
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer                | Technologies |
+|---------------------|--------------|
+| Runtime             | Node.js 20.x |
+| Framework           | Express.js   |
+| Database            | MySQL 8.0 (Amazon RDS) |
+| Storage             | Amazon S3, CloudFront CDN |
+| Search              | Amazon OpenSearch |
+| Caching             | Redis (ElastiCache) |
+| Auth                | JWT, MFA, SES Email Verification |
+| Monitoring          | CloudWatch, X-Ray, Kinesis |
+| CI/CD               | GitHub Actions + Packer |
+
+---
+
+## 📦 Local Development
+
+### Prerequisites
+- Node.js 20+  
+- MySQL 8.0  
+- AWS CLI configured  
+- Git  
+
+---
+
+## 🧰 Installation & Setup
 
 ### 1. Clone Repository
-
-```bash
-git clone git@github.com:YOUR-ORG/webapp.git
+```
+git clone https://github.com/YOUR-USER/webapp.git
 cd webapp
 ```
-
 ### 2. Install Dependencies
-
-```bash
+```
 npm install
 ```
 
 ### 3. Configure Environment
-
-Create `.env` file:
-
-```env
+Create .env file
+```
 NODE_ENV=development
 PORT=8080
 
-# Database
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=csye6225
 DB_USER=root
 DB_PASS=your-password
+DB_NAME=simplicloud
 
-# AWS
 AWS_REGION=us-east-1
-S3_BUCKET_NAME=your-bucket-name
-SNS_TOPIC_ARN=arn:aws:sns:...
+S3_BUCKET_NAME=your-bucket
+OPENSEARCH_ENDPOINT=https://your-opensearch-endpoint
 
-# Logging
-LOG_LEVEL=info
-BCRYPT_SALT_ROUNDS=10
-
-# Email Verification
-VERIFICATION_TOKEN_EXPIRY=60
+JWT_SECRET=your-jwt-secret
+MFA_ISSUER=SimpliCloud
 VERIFICATION_BASE_URL=http://localhost:8080
 ```
-
 ### 4. Setup Database
-
-```bash
-# Create database
-mysql -u root -p
-CREATE DATABASE csye6225;
-exit;
-
-# Tables created automatically by Sequelize
 ```
+mysql -u root -p
+CREATE DATABASE simplicloud;
+exit;
+```
+Sequelize will automatically create required tables.
 
-### 5. Run Application
-
-```bash
+### 5. Start Application
+```
 npm start
 ```
+App available at: http://localhost:8080
 
-Application runs on: `http://localhost:8080`
+### API Endpoints
+Users
+```
+POST   /v1/user
+GET    /v1/user/:id
+PUT    /v1/user/:id
+PATCH  /v1/user/:id
+GET    /v1/user/verify
+POST   /v1/user/mfa/verify
+POST   /v1/user/password/reset
+```
+Products
+```
+POST   /v1/product
+GET    /v1/product/:id
+PUT    /v1/product/:id
+PATCH  /v1/product/:id
+DELETE /v1/product/:id
+```
+Product Images
+```
+POST   /v1/product/:id/image
+GET    /v1/product/:id/image
+DELETE /v1/product/:id/image/:imageId
+```
+Health
+```
+GET /healthz
+```
 
-## API Endpoints
-
-### User Management
-
-- `POST /v1/user` - Create user account
-- `GET /v1/user/:userId` - Get user (authenticated)
-- `PUT /v1/user/:userId` - Update user (authenticated)
-- `PATCH /v1/user/:userId` - Partial update user (authenticated)
-- `GET /v1/user/verify?email=...&token=...` - Verify email address
-
-### Product Management
-
-- `POST /v1/product` - Create product (authenticated)
-- `GET /v1/product/:productId` - Get product
-- `PUT /v1/product/:productId` - Update product (authenticated, owner only)
-- `PATCH /v1/product/:productId` - Partial update product (authenticated, owner only)
-- `DELETE /v1/product/:productId` - Delete product (authenticated, owner only)
-
-### Image Management
-
-- `POST /v1/product/:productId/image` - Upload image (authenticated)
-- `GET /v1/product/:productId/image` - List images
-- `GET /v1/product/:productId/image/:imageId` - Get image details
-- `DELETE /v1/product/:productId/image/:imageId` - Delete image (authenticated)
-
-### Health Check
-
-- `GET /healthz` - Health check endpoint
-
-## Testing
-
-```bash
-# Run all tests
+### 🧪 Testing
+```
 npm test
-
-# Run unit tests
 npm run test:unit
-
-# Run integration tests
 npm run test:integration
 ```
 
-## Deployment
+### 🚀 Deployment Workflow
 
-### AMI Build (Packer)
+This app is tightly integrated with the tf-aws-infra repository:
 
-AMI is built automatically via GitHub Actions on merge to main branch.
+GitHub Actions builds an AMI using Packer
 
-**Manual build:**
+AMI is published to AWS
 
-```bash
-cd packer
-packer init .
-packer build -var "subnet_id=subnet-xxx" aws-ubuntu.pkr.hcl
+Terraform Auto Scaling Groups pull the AMI
+
+Rolling updates or blue-green deploys occur automatically
+
+Infrastructure Repo:
 ```
+https://github.com/YOUR-USER/tf-aws-infra
+```
+### 🔍 Observability Pipeline
 
-### Infrastructure Deployment
+Tracing: AWS X-Ray
 
-See [tf-aws-infra](https://github.com/Vatsal-Naik-CSYE-6225/tf-aws-infra) repository for Terraform deployment.
+Metrics: CloudWatch (custom namespace: SimpliCloud)
 
-## Email Verification Flow
+Streaming Analytics: Kinesis
 
-1. User creates account via `POST /v1/user`
-2. User record created with `email_verified: false`
-3. SNS message published with verification token
-4. Lambda function triggered, sends email via SES
-5. User receives email with verification link (expires in 60 seconds)
-6. User clicks link: `GET /v1/user/verify?email=...&token=...`
-7. If valid and not expired, `email_verified` set to `true`
+Logs: CloudWatch Logs groups with structured JSON
 
-## Security Features
+Anomaly Detection: CloudWatch AI-based detectors
 
-- Passwords hashed with BCrypt (10 salt rounds)
-- Basic Authentication for protected endpoints
-- HTTPS/TLS encryption in production
-- KMS encryption for data at rest
-- Secrets Manager for credentials
-- IMDSv2 for EC2 metadata
+### 👤 Author
 
-## Monitoring
+Vatsal Naik
 
-- **Logs:** CloudWatch Logs group `csye6225`
-- **Metrics:** CloudWatch namespace `CSYE6225`
-- **Custom Metrics:** API calls, response times, DB queries, S3 operations, SNS publishes
-
-## CI/CD
-
-- **Pull Request:** Runs tests, validates Packer template
-- **Merge to Main:** Builds AMI, shares with DEMO account, deploys to DEMO
-
-## Authors
-
-- Vatsal Naik
-
-## License
+### 📄 License
 
 MIT
