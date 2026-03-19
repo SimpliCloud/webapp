@@ -1,4 +1,4 @@
-# SimpliCloud – Serverless E-Commerce Platform (Application Layer)
+# SimpliCloud – Cloud-Native E-Commerce Platform (Application Layer)
 
 SimpliCloud is a cloud-native, security-focused, and scalable e-commerce backend designed to demonstrate how easily modern applications can be built and deployed using AWS-managed services and Infrastructure as Code.  
 This repository contains the **application layer**—including user management, product handling, media workflows, authentication, analytics, and observability.
